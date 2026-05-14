@@ -505,6 +505,7 @@ function simulasyonCalistir(tip) {
 // 9. CANLI SENSÖR YAKALAMA (POLLING)
 // ==========================================
 
+<<<<<<< HEAD
 let _sensorTimerId    = null;   // setTimeout handle (zaman aşımı)
 let _sensorTargetField = null;  // Doldurulacak input ID'si
 let _sensorBtnId      = null;   // Aktif buton ID'si
@@ -515,6 +516,21 @@ const SENSOR_TIMEOUT_MS = 3000; // 3 saniye mock animasyonu
 
 /**
  * Butona tıklandığında çağrılır (MOCK VERSIYON)
+=======
+let _sensorSessionId  = null;   // Aktif oturum kimliği
+let _sensorPollingId  = null;   // setInterval handle
+let _sensorTimerId    = null;   // setTimeout handle (zaman aşımı)
+let _sensorTargetField = null;  // Doldurulacak input ID'si
+let _sensorBtnId      = null;   // Aktif buton ID'si
+let _sensorRemaining  = 30;     // Geri sayım (sn)
+let _sensorTickId     = null;   // Geri sayım interval
+
+const SENSOR_TIMEOUT_MS = 30000; // 30 saniye
+const SENSOR_POLL_MS    = 1500;  // 1.5 saniyede bir sorgula
+
+/**
+ * Butona tıklandığında çağrılır.
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
  * @param {string} type         'CARD' | 'FINGERPRINT' | 'SCHOOL_NO'
  * @param {string} targetField  Doldurulacak input'un id'si
  * @param {string} btnId        Aktif buton id'si (görsel geri bildirim için)
@@ -530,8 +546,15 @@ function sensorOturumBaslat(type, targetField, btnId) {
     const isKart = type === 'CARD';
     const isFP   = type === 'FINGERPRINT';
     document.getElementById('sensorIconBig').textContent       = isKart ? '📡' : (isFP ? '🖐' : '🔢');
+<<<<<<< HEAD
     document.getElementById('sensorModalBaslik').textContent   = isKart ? 'Sensör Aktif...' : (isFP ? 'Sensör Aktif...' : 'Sistem Aktif...');
     document.getElementById('sensorModalAciklama').textContent = 'Okunuyor, lütfen bekleyin... (Otomatik ID Atanıyor)';
+=======
+    document.getElementById('sensorModalBaslik').textContent   = isKart ? 'Kart Bekleniyor...' : (isFP ? 'Parmak İzi Bekleniyor...' : 'Numara Bekleniyor...');
+    document.getElementById('sensorModalAciklama').textContent = isKart
+        ? 'Arduino\'daki kart okuyucuya kartınızı yaklaştırın.'
+        : (isFP ? 'Parmak izini sensöre okutun.' : 'Tuş takımından numarayı girip # ile onaylayın.');
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
 
     // Geri sayımı başlat
     _sensorRemaining = SENSOR_TIMEOUT_MS / 1000;
@@ -544,6 +567,7 @@ function sensorOturumBaslat(type, targetField, btnId) {
     // Overlay'i göster
     document.getElementById('sensorModal').style.display = 'block';
 
+<<<<<<< HEAD
     // Timer dolgu animasyonu (CSS geçiş ile)
     const fill = document.getElementById('sensorTimerFill');
     if (fill) {
@@ -591,6 +615,47 @@ function sensorOturumBaslat(type, targetField, btnId) {
         document.getElementById('sensorModal').style.display = 'none';
 
     }, SENSOR_TIMEOUT_MS);
+=======
+    // Backend'de oturum aç
+    fetch(`${API_BASE}/api/sensor/start?type=${type}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            _sensorSessionId = data.sessionId;
+
+            // Polling başlat
+            _sensorPollingId = setInterval(_sensorPoll, SENSOR_POLL_MS);
+
+            // Zaman aşımı
+            _sensorTimerId = setTimeout(() => {
+                sensorIptal();
+                alert('Sensörden cevap alınamadı (30 sn doldu). Tekrar deneyin.');
+            }, SENSOR_TIMEOUT_MS);
+
+            // Timer dolgu animasyonu (CSS geçiş ile)
+            const fill = document.getElementById('sensorTimerFill');
+            if (fill) {
+                fill.style.transition = 'none';
+                fill.style.width = '100%';
+                // Bir frame bekle, sonra geçişi başlat
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        fill.style.transition = `width ${SENSOR_TIMEOUT_MS}ms linear`;
+                        fill.style.width = '0%';
+                    });
+                });
+            }
+
+            // Geri sayım tick
+            _sensorTickId = setInterval(() => {
+                _sensorRemaining--;
+                _guncelleCountdown();
+            }, 1000);
+        })
+        .catch(() => {
+            sensorIptal();
+            alert('Sensör oturumu başlatılamadı! Sunucu bağlantısını kontrol edin.');
+        });
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
 }
 
 function _guncelleCountdown() {
@@ -598,18 +663,61 @@ function _guncelleCountdown() {
     if (el) el.textContent = `${_sensorRemaining} sn kaldı`;
 }
 
+<<<<<<< HEAD
 /** Kullanıcı İptal butonuna bastı. */
 function sensorIptal() {
+=======
+function _sensorPoll() {
+    if (!_sensorSessionId) return;
+
+    fetch(`${API_BASE}/api/sensor/result?sessionId=${_sensorSessionId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'READY' && data.value) {
+                // Forma yaz
+                const inp = document.getElementById(_sensorTargetField);
+                if (inp) {
+                    inp.value = data.value;
+                    inp.style.background = '#dcfce7'; // Kısa süre yeşil yanma
+                    setTimeout(() => { inp.style.background = ''; }, 1500);
+                }
+                // Oturumu sunucuda temizle
+                fetch(`${API_BASE}/api/sensor/session?sessionId=${_sensorSessionId}`, { method: 'DELETE' }).catch(() => {});
+                sensorTemizle();
+                // Overlay'i kapat
+                document.getElementById('sensorModal').style.display = 'none';
+            }
+            // WAITING ise bir sonraki poll'u bekle
+        })
+        .catch(() => { /* ağ hatası — devam et */ });
+}
+
+/** Kullanıcı İptal butonuna bastı. */
+function sensorIptal() {
+    if (_sensorSessionId) {
+        fetch(`${API_BASE}/api/sensor/session?sessionId=${_sensorSessionId}`, { method: 'DELETE' }).catch(() => {});
+    }
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
     sensorTemizle();
     document.getElementById('sensorModal').style.display = 'none';
 }
 
 /** Tüm zamanlayıcıları ve durumu temizler. */
 function sensorTemizle() {
+<<<<<<< HEAD
     clearTimeout(_sensorTimerId);
     clearInterval(_sensorTickId);
     _sensorTimerId   = null;
     _sensorTickId    = null;
+=======
+    clearInterval(_sensorPollingId);
+    clearTimeout(_sensorTimerId);
+    clearInterval(_sensorTickId);
+    _sensorPollingId = null;
+    _sensorTimerId   = null;
+    _sensorTickId    = null;
+    _sensorSessionId = null;
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
 
     // Buton aktif sınıfını kaldır
     if (_sensorBtnId) {

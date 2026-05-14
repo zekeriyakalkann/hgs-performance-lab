@@ -34,16 +34,30 @@
             <p id="dashboardOzet">Sisteme hoş geldiniz. Veriler hesaplanıyor...</p>
 
             <div class="info-panel">
+<<<<<<< HEAD
                 <h3>Sistem Bilgisi</h3>
                 <p class="info-panel-text">
                     Kullanıcı eklerken <strong>Kart Okut</strong> veya <strong>Parmak Okut</strong> butonlarını kullanarak sisteme otomatik kayıt atayabilirsiniz. Simülasyon modülü, donanım olmadan geçiş testleri yapmanızı sağlar.
+=======
+                <h3>Donanım ve API</h3>
+                <p class="info-panel-text">
+                    <strong>ESP32</strong> Mega ile seri (9600) konuşur; bu bilgisayarda çalışan Spring Boot API'sine HTTP ile bağlanır.
+                    <strong>Cihaz ID</strong> aşağıdaki tablodaki sayı ile aynı olmalıdır (ESP kodundaki <code>DEVICE_DB_ID</code>).
+                    Kart UID'si veritabanındaki <strong>Kart numarası</strong> ile eşleşmelidir (küçük harf, boşluksuz hex örn. <code>04e9b3a2</code>).
+                    Tuş takımında <strong>okul/sicil numarası</strong> girip <code>#</code> ile onaylayın. Parmak izi için kullanıcıya sensördeki <strong>slot numarasını</strong> kaydedin.
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
                 </p>
                 <p class="info-panel-api"><span>API kökü:</span> <code id="apiKokGoster"></code></p>
             </div>
             
             <div class="simulation-card">
+<<<<<<< HEAD
                 <h3>Geçiş Testi (Simülasyon)</h3>
                 <p>Uç noktaları test etmek için aşağıdaki yöntemlerden birini kullanın.</p>
+=======
+                <h3>Geçiş Testi (Tarayıcıdan)</h3>
+                <p>ESP32 olmadan API uçlarını doğrudan test etmek için aşağıdaki yöntemlerden birini kullanın.</p>
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
 
                 <div class="sim-tabs">
                     <button class="sim-tab active" id="tabKart" onclick="simTabSec('kart')">&#128266; Kart</button>
@@ -87,7 +101,11 @@
         <!-- ========================================== -->
         <section id="kullanicilar" class="sayfa-bolumu" style="display: none;">
             <h2>Kullanıcı Listesi</h2>
+<<<<<<< HEAD
             <p class="section-hint">Kullanıcı eklerken kart ve parmak izi ID'lerini otomatik olarak oluşturmak için sağdaki <strong>Okut</strong> butonlarını kullanabilirsiniz.</p>
+=======
+            <p class="section-hint">Kart alanında UID'yi <strong>küçük harf, boşluksuz hex</strong> girin. Parmak izi için R307'deki <strong>slot numarasını</strong> kaydedin.</p>
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
             <button onclick="yeniKullaniciEkle()">+ Yeni Kullanıcı Ekle</button>
 
             <div class="table-wrap">
@@ -134,7 +152,11 @@
                         <div class="form-grup">
                             <label>Kart Numarası (RFID):</label>
                             <div class="sensor-input-row">
+<<<<<<< HEAD
                                 <input type="text" id="formKartNo" placeholder="Sağdaki butona basarak otomatik ID oluşturun">
+=======
+                                <input type="text" id="formKartNo" placeholder="Örn: 04e9b3a2  —  veya sağdaki butona basın">
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
                                 <button type="button" class="sensor-btn" id="btnSensorKart"
                                         onclick="sensorOturumBaslat('CARD','formKartNo','btnSensorKart')">
                                     &#128225; Kart Okut
@@ -147,7 +169,11 @@
                             <label>Parmak izi sensör slotu (R307 ID):</label>
                             <div class="sensor-input-row">
                                 <input type="text" id="formParmakIziSlot" maxlength="10"
+<<<<<<< HEAD
                                        placeholder="Sağdaki butona basarak otomatik ID oluşturun">
+=======
+                                       placeholder="Örn: 1  —  veya sağdaki butona basın">
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
                                 <button type="button" class="sensor-btn" id="btnSensorFP"
                                         onclick="sensorOturumBaslat('FINGERPRINT','formParmakIziSlot','btnSensorFP')">
                                     &#128406; Parmak Okut
@@ -187,8 +213,13 @@
                     <div class="sensor-pulse-anim">
                         <span id="sensorIconBig">&#128225;</span>
                     </div>
+<<<<<<< HEAD
                     <h3 id="sensorModalBaslik">Sensör Aktif...</h3>
                     <p id="sensorModalAciklama">Okunuyor, lütfen bekleyin... (Otomatik ID Atanıyor)</p>
+=======
+                    <h3 id="sensorModalBaslik">Kart Bekleniyor...</h3>
+                    <p id="sensorModalAciklama">Arduino'daki kart okuyucuya kartınızı yaklaştırın.</p>
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
                     <div class="sensor-timer-bar">
                         <div class="sensor-timer-fill" id="sensorTimerFill"></div>
                     </div>
@@ -203,7 +234,11 @@
         <!-- ========================================== -->
         <section id="cihazlar" class="sayfa-bolumu" style="display: none;">
             <h2>Terminal ve Cihaz Yönetimi</h2>
+<<<<<<< HEAD
             <p class="section-hint">Sistemde kullanılacak sanal veya fiziksel terminalleri buradan yönetebilirsiniz.</p>
+=======
+            <p class="section-hint">Tablodaki <strong>Cihaz ID</strong> değerini ESP32 kodundaki <code>DEVICE_DB_ID</code> ile aynı tutun.</p>
+>>>>>>> e06b7e102bf27bffc7f4a4add8d940d63fea4190
             <button onclick="yeniCihazEkle()">+ Yeni Cihaz Ekle</button>
             
             <div class="table-wrap">
