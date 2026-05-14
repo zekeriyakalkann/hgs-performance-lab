@@ -1,0 +1,1 @@
+$path="C:\Program Files\PostgreSQL\18\pgAdmin 4\python\python.exe"; $bytes=[System.IO.File]::ReadAllBytes($path); $peOffset=[BitConverter]::ToInt32($bytes, 0x3c); $subsystemOffset=$peOffset+92; $bytes[$subsystemOffset]=3; [System.IO.File]::WriteAllBytes($path, $bytes)

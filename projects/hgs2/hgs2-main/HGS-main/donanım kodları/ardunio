@@ -1,0 +1,2671 @@
+// /*
+// ============================================================
+// HIBRIT GECIS KONTROL SISTEMI - TEMIZ STABIL SURUM
+// Arduino Mega 2560
+
+// AKTIF DONANIM
+// - RFID (RC522)
+// - PIN (4x4 Keypad)
+// - Fingerprint (R307S)
+// - OLED SSD1306 128x64
+// - Joystick menu kontrol
+// - Servo ile kilit simulasyonu
+// - Reed Switch
+// - MOSFET ile yuk surme
+// - Green / Red / Blue LED
+// - Buzzer
+
+// NOTLAR
+// - Kod String kullanmaz.
+// - Ayarlar EEPROM'a kaydedilir.
+// - Fingerprint sensor bulunmazsa sistem calismaya devam eder.
+// - PIR sistemi bu surumden kaldirilmistir.
+// ============================================================
+// */
+
+// #include <Wire.h>
+// #include <SPI.h>
+// #include <MFRC522.h>
+// #include <Keypad.h>
+// #include <Adafruit_Fingerprint.h>
+// #include <Adafruit_GFX.h>
+// #include <Adafruit_SSD1306.h>
+// #include <Servo.h>
+// #include <EEPROM.h>
+// #include <string.h>
+
+// // =====================================================
+// // SABITLER
+// // =====================================================
+// #define SCREEN_WIDTH 128
+// #define SCREEN_HEIGHT 64
+// #define OLED_ADDR 0x3C
+
+// #define RFID_SS_PIN   53
+// #define RFID_RST_PIN  49
+
+// #define GREEN_LED 30
+// #define RED_LED   31
+// #define BLUE_LED  32
+// #define BUZZER    33
+
+// #define REED_PIN   34
+// #define MOSFET_PIN 35
+
+// #define JOY_X   A0
+// #define JOY_Y   A1
+// #define JOY_SW  38
+
+// // KY-023 genelde SW basinca pini GND'ye ceker (LOW). Bazi modullerde ters; 0
+// yapip INPUT + harici pull-down kullanin. #define JOY_SW_ACTIVE_LOW 1
+
+// // SW calismiyorsa: Y ekseni ~merkezdeyken sticki saga it = SEC, sola it =
+// GERI #define JOY_X_SELECT_THRESHOLD 860 #define JOY_X_BACK_THRESHOLD   180
+// #define JOY_Y_NEUTRAL_LO       220
+// #define JOY_Y_NEUTRAL_HI       820
+
+// #define SERVO_PIN 6
+// #define SERVO_CLOSED_ANGLE 0
+// #define SERVO_OPEN_ANGLE    90
+
+// #define CFG_MAGIC 0xA5
+// #define APP_VERSION "v2.3-clean"
+
+// // ESP32 koprusu (Mega Serial2: RX2=pin17, TX2=pin16, 9600 baud). 0: sadece
+// EEPROM / yerel dogrulama. #define USE_BACKEND_AUTH 1 #define ESP_LINK Serial2
+
+// #define LOG_SIZE 8
+
+// // REED: INPUT_PULLUP kullaniliyor.
+// // NC (Normal Kapali) tip reed switch icin: REED_ACTIVE_HIGH 0
+// //   - Manyetik alan yok (kapi acik)  -> switch kapali -> pin LOW  -> HIGH
+// degil -> kapi acik DOGRU
+// //   - Manyetik alan var (kapi kapali)-> switch acilir -> pin HIGH -> HIGH =
+// kapi kapali = DOGRU
+// // NO (Normal Acik) tip icin REED_ACTIVE_HIGH 1 yapin.
+// // Guc acildiginda kapi kapali gorunmuyorsa bu degeri degistirin.
+// #define REED_ACTIVE_HIGH   0
+// #define MOSFET_ACTIVE_HIGH 1
+
+// // =====================================================
+// // OLED / RFID / FP / SERVO
+// // =====================================================
+// Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+// MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
+// Adafruit_Fingerprint finger(&Serial1);
+// Servo lockServo;
+
+// // =====================================================
+// // KEYPAD
+// // =====================================================
+// const byte ROWS = 4;
+// const byte COLS = 4;
+
+// char keys[ROWS][COLS] = {
+//   {'1','2','3','A'},
+//   {'4','5','6','B'},
+//   {'7','8','9','C'},
+//   {'*','0','#','D'}
+// };
+
+// byte rowPins[ROWS] = {22, 23, 24, 25};
+// byte colPins[COLS] = {26, 27, 28, 29};
+
+// Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// // =====================================================
+// // CONFIG
+// // =====================================================
+// struct __attribute__((packed)) ConfigData {
+//   uint8_t magic;
+//   char pin[5];
+//   char uid[24];
+//   uint8_t fpId;
+//   uint8_t alarmEnabled;
+//   uint16_t accessDurationMs;
+//   uint16_t doorOpenTimeoutMs;
+//   uint16_t lockoutDurationMs;
+//   uint16_t pinEntryTimeoutMs;
+//   uint8_t checksum;
+// };
+
+// ConfigData cfg;
+
+// // =====================================================
+// // LOG
+// // =====================================================
+// struct LogEntry {
+//   unsigned long ms;
+//   char msg[22];
+// };
+
+// LogEntry logs[LOG_SIZE];
+// uint8_t logHead = 0;
+// uint8_t logCount = 0;
+
+// // =====================================================
+// // DURUM MAKINESI
+// // =====================================================
+// enum SystemMode {
+//   MODE_SLEEP,
+//   MODE_MENU,
+//   MODE_NORMAL,
+//   MODE_ACCESS,
+//   MODE_DENIED,
+//   MODE_LOCKOUT,
+//   MODE_ALARM
+// };
+
+// enum MenuContext {
+//   MENU_MAIN,
+//   MENU_GIRIS,
+//   MENU_KAYIT,
+//   MENU_FP,
+//   MENU_USER,
+//   MENU_STATUS,
+//   MENU_TEST,
+//   MENU_LOGS,
+//   MENU_SETTINGS,
+//   MENU_ABOUT
+// };
+
+// // Secici giris modu
+// enum EntryMode {
+//   ENTRY_NONE,
+//   ENTRY_FINGERPRINT,
+//   ENTRY_CARD,
+//   ENTRY_KEYPAD
+// };
+
+// SystemMode currentMode = MODE_MENU;
+// MenuContext currentMenuContext = MENU_MAIN;
+
+// // =====================================================
+// // MENU ITEMLERI
+// // =====================================================
+// const char* const mainMenuItems[] = {
+//   "Giris Yap",
+//   "Sistem Durumu",
+//   "Test Menusu",
+//   "Loglar",
+//   "Ayarlar",
+//   "Hakkinda"
+// };
+
+// const char* const girisMenuItems[] = {
+//   "Parmak Izi Giris",
+//   "Kart Girisi",
+//   "Okul No Girisi",
+//   "Tum Sensorler",
+//   "Geri"
+// };
+
+// const char* const kayitMenuItems[] = {
+//   "Okul No Kaydet",
+//   "Kart Kaydet",
+//   "Parmak Izi Kaydet",
+//   "Geri"
+// };
+
+// const char* const fpMenuItems[] = {
+//   "Kaydet",
+//   "Sil",
+//   "Tumunu Sil",
+//   "Durum",
+//   "Geri"
+// };
+
+// const char* const userMenuItems[] = {
+//   "PIN Degistir",
+//   "RFID Degistir",
+//   "FP ID Degistir",
+//   "Okul no (DB)",
+//   "Geri"
+// };
+
+// const char* const statusMenuItems[] = {
+//   "Genel Durum",
+//   "Sensor Durum",
+//   "Zamanlayicilar",
+//   "Geri"
+// };
+
+// const char* const testMenuItems[] = {
+//   "LED Test",
+//   "Buzzer Test",
+//   "Servo Test",
+//   "OLED Test",
+//   "RFID Test",
+//   "FP Test",
+//   "Keypad Test",
+//   "Geri"
+// };
+
+// const char* const logMenuItems[] = {
+//   "Son Loglar",
+//   "Temizle",
+//   "Geri"
+// };
+
+// const char* const settingsMenuItems[] = {
+//   "Alarm On/Off",
+//   "Giris Sure",
+//   "Kapi Sure",
+//   "Lockout Sure",
+//   "Fabrika Ayar",
+//   "Geri"
+// };
+
+// const char* const aboutMenuItems[] = {
+//   "Versiyon",
+//   "Geri"
+// };
+
+// // =====================================================
+// // GLOBAL DURUMLAR
+// // =====================================================
+// bool fingerprintAvailable = false;
+// EntryMode activeEntryMode = ENTRY_NONE;
+
+// uint8_t menuCursor = 0;
+// uint8_t menuTop = 0;
+
+// char enteredPIN[25] = {0};
+// uint8_t pinLen = 0;
+// bool pinEntryActive = false;
+// unsigned long pinEntryLastInputMs = 0;
+
+// uint8_t failedAttempts = 0;
+
+// unsigned long accessStartedAt = 0;
+// char accessMethod[20] = {0};
+// unsigned long lastAccessRefreshMs = 0;
+
+// char deniedReason[24] = {0};
+// unsigned long deniedStartedAt = 0;
+
+// unsigned long lockoutUntil = 0;
+// unsigned long lastLockoutRefreshMs = 0;
+
+// char alarmReason[32] = {0};
+// unsigned long alarmStartedAt = 0;
+// unsigned long lastAlarmRefreshMs = 0;
+
+// unsigned long lastActivityMs = 0;
+// unsigned long lastNormalRefreshMs = 0;
+// unsigned long doorOpenSince = 0;
+
+// unsigned long buzzerOffAt = 0;
+// unsigned long lastPingMs = 0; // ESP32'ye web poll tetigi icin
+
+// // =====================================================
+// // PROTOTIPLER
+// // =====================================================
+// void oledYaz(const char* s1, const char* s2 = "", const char* s3 = "");
+// void delayWithTasks(unsigned long ms);
+// bool confirmAction(const char* title, const char* msg);
+
+// bool kapiAcikMi();
+
+// void buzzerOn();
+// void buzzerOff();
+// void beepKisa();
+// void beepUzun();
+// void updateBuzzer();
+// void touchActivity();
+// void clearPinEntry();
+// void addLog(const char* msg);
+// void waitJoyRelease();
+
+// void setDefaultConfig();
+// uint8_t calcChecksum(const uint8_t* data, size_t len);
+// void saveConfig();
+// void loadConfig();
+
+// void enterMenuMode();
+// void enterNormalMode();
+// void enterAccessMode(const char* method);
+// void enterDeniedMode(const char* reason);
+// void enterLockoutMode();
+// void enterAlarmMode(const char* reason);
+
+// void normalEkrani();
+// void accessEkrani();
+// void deniedEkrani();
+// void lockoutEkrani();
+// void alarmEkrani();
+
+// void updateNormalScreen();
+// void updateAccessState();
+// void updateDeniedState();
+// void updateLockoutState();
+// void updateAlarmState();
+// void updatePinEntryTimeout();
+// void updateCoreTasks();
+
+// void doorMonitor();
+
+// void renderMenuScreen();
+// void setMenuContext(MenuContext ctx);
+// void menuBack();
+// void menuSelect();
+// void menuKontrol();
+
+// const char* getMenuTitle(MenuContext ctx);
+// const char* const* getMenuItems(MenuContext ctx);
+// uint8_t getMenuCount(MenuContext ctx);
+
+// void rfidKontrol();
+// void keypadKontrol();
+// void fingerprintKontrol();
+
+// #if USE_BACKEND_AUTH
+// void formatUidCompact(byte* uidByte, byte size, char* out, size_t outSize);
+// bool espSunucuyaSor(const char* gonderSatir, char* yanit, size_t yanitBoy,
+// unsigned long timeoutMs); void checkWebScanRequest(); void
+// handleWebScanCard(); void handleWebScanFP(); #endif
+
+// bool terminalVeriKaydiGonder(const char* msg, char* resp, size_t n);
+// void uidSpacedToCompact(const char* spaced, char* compact, size_t
+// compactSize); bool readFlexibleDigitsKeypad(const char* title, char* out,
+// size_t outSize, uint8_t minLen, uint8_t maxLen, unsigned long timeoutMs);
+
+// bool readPinEntry(const char* title, char* outPin, size_t outSize, unsigned
+// long timeoutMs); bool readNumberFromKeypad(const char* title, uint16_t
+// minVal, uint16_t maxVal, uint16_t &outVal, unsigned long timeoutMs); bool
+// waitForRfidUid(char* outUid, size_t outSize, unsigned long timeoutMs);
+
+// bool fingerprintEnroll(uint8_t id);
+// void fingerprintKayitMenu();
+// void fingerprintSilMenu();
+// void fingerprintTumunuSilMenu();
+// void fingerprintDurumMenu();
+
+// void changePinMenu();
+// void changeRfidMenu();
+// void changeFpIdMenu();
+// void changeOgrenciNoMenu();
+
+// // Yeni giris modlari
+// void girisModuFP();
+// void girisModuKart();
+// void girisModuNo();
+// void girisModuTum();
+
+// // Yeni kayit fonksiyonlari
+// void kayitOgrenciNoMenu();
+// void kayitKartMenu();
+// void kayitParmakIziMenu();
+
+// void showGeneralStatusScreen();
+// void showSensorStatusScreen();
+// void showTimersScreen();
+// void showRecentLogsScreen();
+// void clearLogs();
+
+// void ledTest();
+// void buzzerTest();
+// void servoTest();
+// void oledTest();
+// void rfidTest();
+// void fpTest();
+// void keypadTest();
+
+// void toggleAlarmMenu();
+// void changeAccessDurationMenu();
+// void changeDoorTimeoutMenu();
+// void changeLockoutDurationMenu();
+// void factoryDefaultsMenu();
+
+// void aboutVersionScreen();
+
+// // =====================================================
+// // YARDIMCI
+// // =====================================================
+// uint8_t calcChecksum(const uint8_t* data, size_t len) {
+//   uint8_t c = 0;
+//   for (size_t i = 0; i < len; i++) c ^= data[i];
+//   return c;
+// }
+
+// void setDefaultConfig() {
+//   memset(&cfg, 0, sizeof(cfg));
+//   cfg.magic = CFG_MAGIC;
+//   strncpy(cfg.pin, "1234", sizeof(cfg.pin) - 1);
+//   strncpy(cfg.uid, "84 8d 64 06", sizeof(cfg.uid) - 1);
+//   cfg.fpId = 1;
+//   cfg.alarmEnabled = 1;
+//   cfg.accessDurationMs = 5000;
+//   cfg.doorOpenTimeoutMs = 15000;
+//   cfg.lockoutDurationMs = 30000;
+//   cfg.pinEntryTimeoutMs = 5000;
+//   cfg.checksum = 0;
+//   cfg.checksum = calcChecksum((const uint8_t*)&cfg, sizeof(ConfigData) - 1);
+// }
+
+// void saveConfig() {
+//   cfg.magic = CFG_MAGIC;
+//   cfg.pin[sizeof(cfg.pin) - 1] = '\0';
+//   cfg.uid[sizeof(cfg.uid) - 1] = '\0';
+//   cfg.checksum = 0;
+//   cfg.checksum = calcChecksum((const uint8_t*)&cfg, sizeof(ConfigData) - 1);
+//   EEPROM.put(0, cfg);
+// }
+
+// void loadConfig() {
+//   EEPROM.get(0, cfg);
+
+//   bool ok = true;
+//   if (cfg.magic != CFG_MAGIC) ok = false;
+
+//   uint8_t stored = cfg.checksum;
+//   cfg.checksum = 0;
+//   uint8_t calc = calcChecksum((const uint8_t*)&cfg, sizeof(ConfigData) - 1);
+
+//   if (stored != calc) ok = false;
+
+//   if (!ok) {
+//     setDefaultConfig();
+//     saveConfig();
+//   } else {
+//     cfg.checksum = stored;
+//     cfg.pin[sizeof(cfg.pin) - 1] = '\0';
+//     cfg.uid[sizeof(cfg.uid) - 1] = '\0';
+//     if (cfg.fpId > 127) cfg.fpId = 1;
+//     if (cfg.accessDurationMs < 1000) cfg.accessDurationMs = 5000;
+//     if (cfg.doorOpenTimeoutMs < 5000) cfg.doorOpenTimeoutMs = 15000;
+//     if (cfg.lockoutDurationMs < 5000) cfg.lockoutDurationMs = 30000;
+//     if (cfg.pinEntryTimeoutMs < 1000) cfg.pinEntryTimeoutMs = 5000;
+//   }
+// }
+
+// void oledYaz(const char* s1, const char* s2, const char* s3) {
+//   display.clearDisplay();
+//   display.setTextSize(1);
+//   display.setTextColor(SSD1306_WHITE);
+
+//   display.setCursor(0, 0);
+//   display.println(s1);
+
+//   display.setCursor(0, 20);
+//   display.println(s2);
+
+//   display.setCursor(0, 40);
+//   display.println(s3);
+
+//   display.display();
+// }
+
+// void delayWithTasks(unsigned long ms) {
+//   unsigned long start = millis();
+//   while (millis() - start < ms) {
+//     updateCoreTasks();
+//     touchActivity();
+//   }
+// }
+
+// bool confirmAction(const char* title, const char* msg) {
+//   oledYaz(title, msg, "#=EVET D=HAYIR");
+//   while (true) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     char key = keypad.getKey();
+//     if (key == '#') return true;
+//     if (key == 'D' || key == '*') return false;
+//   }
+// }
+
+// bool kapiAcikMi() {
+// #if REED_ACTIVE_HIGH
+//   return digitalRead(REED_PIN) == HIGH;
+// #else
+//   return digitalRead(REED_PIN) == LOW;
+// #endif
+// }
+
+// void buzzerOn() {
+//   digitalWrite(BUZZER, HIGH);
+// }
+
+// void buzzerOff() {
+//   digitalWrite(BUZZER, LOW);
+// }
+
+// void beepKisa() {
+//   buzzerOn();
+//   buzzerOffAt = millis() + 150UL;
+// }
+
+// void beepUzun() {
+//   buzzerOn();
+//   buzzerOffAt = millis() + 800UL;
+// }
+
+// void updateBuzzer() {
+//   if (currentMode == MODE_LOCKOUT || currentMode == MODE_ALARM) return;
+
+//   if (buzzerOffAt != 0 && millis() >= buzzerOffAt) {
+//     buzzerOff();
+//     buzzerOffAt = 0;
+//   }
+// }
+
+// void touchActivity() {
+//   lastActivityMs = millis();
+// }
+
+// void clearPinEntry() {
+//   memset(enteredPIN, 0, sizeof(enteredPIN));
+//   pinLen = 0;
+//   pinEntryActive = false;
+//   pinEntryLastInputMs = 0;
+// }
+
+// void addLog(const char* msg) {
+//   logHead = (logHead + 1) % LOG_SIZE;
+//   logs[logHead].ms = millis();
+//   strncpy(logs[logHead].msg, msg, sizeof(logs[logHead].msg) - 1);
+//   logs[logHead].msg[sizeof(logs[logHead].msg) - 1] = '\0';
+//   if (logCount < LOG_SIZE) logCount++;
+// }
+
+// uint8_t logIndexFromLatest(uint8_t n) {
+//   if (n >= logCount) return 0;
+//   int16_t idx = (int16_t)logHead - (int16_t)n;
+//   while (idx < 0) idx += LOG_SIZE;
+//   return (uint8_t)idx;
+// }
+
+// static inline bool joySwIsPressed() {
+// #if JOY_SW_ACTIVE_LOW
+//   return digitalRead(JOY_SW) == LOW;
+// #else
+//   return digitalRead(JOY_SW) == HIGH;
+// #endif
+// }
+
+// void waitJoyRelease() {
+//   while (joySwIsPressed()) {
+//     updateCoreTasks();
+//   }
+//   delay(80);
+// }
+
+// // =====================================================
+// // DURUM / EKRANLAR
+// // =====================================================
+// void normalEkrani() {
+//   digitalWrite(BLUE_LED, HIGH);
+//   digitalWrite(GREEN_LED, LOW);
+//   digitalWrite(RED_LED, LOW);
+
+//   char line2[24];
+//   char line3[24];
+
+//   // Secili giriş modunu goster
+//   if (activeEntryMode == ENTRY_FINGERPRINT) {
+//     snprintf(line2, sizeof(line2), "PARMAK IZI MODU");
+//     snprintf(line3, sizeof(line3), "Parmak okutun");
+//   } else if (activeEntryMode == ENTRY_CARD) {
+//     snprintf(line2, sizeof(line2), "KART MODU");
+//     snprintf(line3, sizeof(line3), "Kart okutun");
+//   } else if (activeEntryMode == ENTRY_KEYPAD) {
+//     snprintf(line2, sizeof(line2), "OKUL NO MODU");
+//     snprintf(line3, sizeof(line3), "No girin + #");
+//   } else {
+//     // ENTRY_NONE: tum sensorler
+// #if USE_BACKEND_AUTH
+//     if (fingerprintAvailable) snprintf(line2, sizeof(line2), "Kart/No/FP");
+//     else snprintf(line2, sizeof(line2), "Kart / No");
+//     snprintf(line3, sizeof(line3), "No icin rakam+# gir");
+// #else
+//     if (fingerprintAvailable) snprintf(line2, sizeof(line2), "Kart/PIN/FP");
+//     else snprintf(line2, sizeof(line2), "Kart / PIN");
+//     snprintf(line3, sizeof(line3), kapiAcikMi() ? "KAPI ACIK" : "KAPI
+//     KAPALI");
+// #endif
+//   }
+
+//   char kapiBilgi[24];
+//   snprintf(kapiBilgi, sizeof(kapiBilgi), kapiAcikMi() ? "KAPI ACIK" : line3);
+//   oledYaz("HIBRIT GIRIS", line2, kapiBilgi);
+// }
+
+// void accessEkrani() {
+//   unsigned long elapsed = millis() - accessStartedAt;
+//   unsigned long remaining = (elapsed >= cfg.accessDurationMs) ? 0 :
+//   ((cfg.accessDurationMs - elapsed + 999UL) / 1000UL);
+
+//   char line2[20];
+//   snprintf(line2, sizeof(line2), "Kalan: %lus", remaining);
+
+//   oledYaz("ERISIM ONAY", line2, accessMethod);
+// }
+
+// void deniedEkrani() {
+//   char line2[20];
+//   snprintf(line2, sizeof(line2), "Hata: %u/3", (unsigned)failedAttempts);
+//   oledYaz("ERISIM RED", deniedReason, line2);
+// }
+
+// void lockoutEkrani() {
+//   unsigned long remaining = (millis() >= lockoutUntil) ? 0 : ((lockoutUntil -
+//   millis() + 999UL) / 1000UL); char line2[20]; snprintf(line2, sizeof(line2),
+//   "Kalan: %lus", remaining); oledYaz("SISTEM KILITLI", line2, "3 hatali
+//   deneme");
+// }
+
+// void alarmEkrani() {
+//   oledYaz("ALARM MODU", alarmReason, kapiAcikMi() ? "KAPI ACIK" : "KAPI
+//   KAPALI");
+// }
+
+// void showGeneralStatusScreen() {
+//   char l2[22];
+//   char l3[22];
+//   const char* modeStr = "UNK";
+
+//   switch (currentMode) {
+//     case MODE_SLEEP:   modeStr = "SLEEP"; break;
+//     case MODE_MENU:    modeStr = "MENU"; break;
+//     case MODE_NORMAL:  modeStr = "NORMAL"; break;
+//     case MODE_ACCESS:  modeStr = "ACCESS"; break;
+//     case MODE_DENIED:  modeStr = "DENIED"; break;
+//     case MODE_LOCKOUT: modeStr = "LOCKOUT"; break;
+//     case MODE_ALARM:   modeStr = "ALARM"; break;
+//   }
+
+//   snprintf(l2, sizeof(l2), "MODE:%s ATT:%u", modeStr,
+//   (unsigned)failedAttempts); snprintf(l3, sizeof(l3), "FP:%s ID:%u",
+//   fingerprintAvailable ? "OK" : "NO", (unsigned)cfg.fpId); oledYaz("GENEL
+//   DURUM", l2, l3); delayWithTasks(1800);
+// }
+
+// void showSensorStatusScreen() {
+//   char l2[22];
+//   char l3[22];
+//   snprintf(l2, sizeof(l2), "REED:%s", kapiAcikMi() ? "OPEN" : "CLOSED");
+//   snprintf(l3, sizeof(l3), "FP:%s RFID:%s", fingerprintAvailable ? "OK" :
+//   "NO", cfg.uid[0] ? "SET" : "NO"); oledYaz("SENSOR DURUM", l2, l3);
+//   delayWithTasks(1800);
+// }
+
+// void showTimersScreen() {
+//   char l2[22];
+//   char l3[22];
+//   snprintf(l2, sizeof(l2), "A:%us D:%us", cfg.accessDurationMs / 1000U,
+//   cfg.doorOpenTimeoutMs / 1000U); snprintf(l3, sizeof(l3), "L:%us P:%us",
+//   cfg.lockoutDurationMs / 1000U, cfg.pinEntryTimeoutMs / 1000U);
+//   oledYaz("ZAMANLAYICILAR", l2, l3);
+//   delayWithTasks(1800);
+// }
+
+// void showRecentLogsScreen() {
+//   display.clearDisplay();
+//   display.setTextSize(1);
+//   display.setTextColor(SSD1306_WHITE);
+
+//   display.setCursor(0, 0);
+//   display.println("SON LOGLAR");
+
+//   if (logCount == 0) {
+//     display.setCursor(0, 20);
+//     display.println("Log yok");
+//   } else {
+//     uint8_t shown = 0;
+//     for (uint8_t i = 0; i < 3 && i < logCount; i++) {
+//       uint8_t idx = logIndexFromLatest(i);
+//       display.setCursor(0, 16 + (shown * 16));
+//       display.print(shown + 1);
+//       display.print(": ");
+//       display.println(logs[idx].msg);
+//       shown++;
+//     }
+//   }
+
+//   display.display();
+//   delayWithTasks(1800);
+// }
+
+// void aboutVersionScreen() {
+//   oledYaz("HAKKINDA", APP_VERSION, "Mega / EEPROM / Menu");
+//   delayWithTasks(1800);
+// }
+
+// // =====================================================
+// // MOD DEGISTIRME
+// // =====================================================
+// void enterMenuMode() {
+//   currentMode = MODE_MENU;
+//   clearPinEntry();
+//   menuCursor = 0;
+//   menuTop = 0;
+//   touchActivity();
+//   renderMenuScreen();
+//   addLog("MENU");
+// }
+
+// void enterNormalMode() {
+//   currentMode = MODE_NORMAL;
+//   clearPinEntry();
+//   touchActivity();
+//   lastNormalRefreshMs = 0;
+//   normalEkrani();
+//   addLog("NORMAL");
+// }
+
+// void enterAccessMode(const char* method) {
+//   currentMode = MODE_ACCESS;
+//   clearPinEntry();
+//   accessStartedAt = millis();
+//   lastAccessRefreshMs = 0;
+
+//   strncpy(accessMethod, method, sizeof(accessMethod) - 1);
+//   accessMethod[sizeof(accessMethod) - 1] = '\0';
+
+//   digitalWrite(GREEN_LED, HIGH);
+//   digitalWrite(RED_LED, LOW);
+//   digitalWrite(BLUE_LED, LOW);
+
+//   lockServo.write(SERVO_OPEN_ANGLE);
+//   beepKisa();
+
+//   Serial.print(F("ACCESS OK: "));
+//   Serial.println(accessMethod);
+
+//   addLog(accessMethod);
+//   accessEkrani();
+// }
+
+// void enterDeniedMode(const char* reason) {
+//   currentMode = MODE_DENIED;
+//   clearPinEntry();
+//   deniedStartedAt = millis();
+
+//   strncpy(deniedReason, reason, sizeof(deniedReason) - 1);
+//   deniedReason[sizeof(deniedReason) - 1] = '\0';
+
+//   digitalWrite(GREEN_LED, LOW);
+//   digitalWrite(RED_LED, HIGH);
+//   digitalWrite(BLUE_LED, LOW);
+
+//   beepUzun();
+
+//   Serial.print(F("ACCESS DENIED: "));
+//   Serial.println(deniedReason);
+
+//   addLog(reason);
+//   deniedEkrani();
+// }
+
+// void enterLockoutMode() {
+//   currentMode = MODE_LOCKOUT;
+//   clearPinEntry();
+//   lockoutUntil = millis() + cfg.lockoutDurationMs;
+//   lastLockoutRefreshMs = 0;
+
+//   buzzerOffAt = 0;
+//   buzzerOff();
+
+//   digitalWrite(GREEN_LED, LOW);
+//   digitalWrite(RED_LED, LOW);
+//   digitalWrite(BLUE_LED, LOW);
+
+//   Serial.println(F("LOCKOUT START"));
+//   addLog("LOCKOUT");
+//   lockoutEkrani();
+// }
+
+// void enterAlarmMode(const char* reason) {
+//   currentMode = MODE_ALARM;
+//   clearPinEntry();
+//   alarmStartedAt = millis();
+//   lastAlarmRefreshMs = 0;
+
+//   strncpy(alarmReason, reason, sizeof(alarmReason) - 1);
+//   alarmReason[sizeof(alarmReason) - 1] = '\0';
+
+//   buzzerOffAt = 0;
+//   buzzerOff();
+
+//   digitalWrite(GREEN_LED, LOW);
+//   digitalWrite(BLUE_LED, LOW);
+
+//   Serial.print(F("ALARM: "));
+//   Serial.println(alarmReason);
+
+//   addLog(reason);
+//   alarmEkrani();
+// }
+
+// // =====================================================
+// // MENU
+// // =====================================================
+// const char* getMenuTitle(MenuContext ctx) {
+//   switch (ctx) {
+//     case MENU_MAIN:     return "ANA MENU";
+//     case MENU_GIRIS:    return "GIRIS YAP";
+//     case MENU_KAYIT:    return "KAYIT YAP";
+//     case MENU_FP:       return "PARMAK IZI";
+//     case MENU_USER:     return "KULLANICI";
+//     case MENU_STATUS:   return "DURUM";
+//     case MENU_TEST:     return "TEST";
+//     case MENU_LOGS:     return "LOGLAR";
+//     case MENU_SETTINGS: return "AYARLAR";
+//     case MENU_ABOUT:    return "HAKKINDA";
+//   }
+//   return "MENU";
+// }
+
+// const char* const* getMenuItems(MenuContext ctx) {
+//   switch (ctx) {
+//     case MENU_MAIN:     return mainMenuItems;
+//     case MENU_GIRIS:    return girisMenuItems;
+//     case MENU_KAYIT:    return kayitMenuItems;
+//     case MENU_FP:       return fpMenuItems;
+//     case MENU_USER:     return userMenuItems;
+//     case MENU_STATUS:   return statusMenuItems;
+//     case MENU_TEST:     return testMenuItems;
+//     case MENU_LOGS:     return logMenuItems;
+//     case MENU_SETTINGS: return settingsMenuItems;
+//     case MENU_ABOUT:    return aboutMenuItems;
+//   }
+//   return mainMenuItems;
+// }
+
+// uint8_t getMenuCount(MenuContext ctx) {
+//   switch (ctx) {
+//     case MENU_MAIN:     return sizeof(mainMenuItems) /
+//     sizeof(mainMenuItems[0]); case MENU_GIRIS:    return
+//     sizeof(girisMenuItems) / sizeof(girisMenuItems[0]); case MENU_KAYIT:
+//     return sizeof(kayitMenuItems) / sizeof(kayitMenuItems[0]); case MENU_FP:
+//     return sizeof(fpMenuItems) / sizeof(fpMenuItems[0]); case MENU_USER:
+//     return sizeof(userMenuItems) / sizeof(userMenuItems[0]); case
+//     MENU_STATUS:   return sizeof(statusMenuItems) /
+//     sizeof(statusMenuItems[0]); case MENU_TEST:     return
+//     sizeof(testMenuItems) / sizeof(testMenuItems[0]); case MENU_LOGS: return
+//     sizeof(logMenuItems) / sizeof(logMenuItems[0]); case MENU_SETTINGS:
+//     return sizeof(settingsMenuItems) / sizeof(settingsMenuItems[0]); case
+//     MENU_ABOUT:    return sizeof(aboutMenuItems) / sizeof(aboutMenuItems[0]);
+//   }
+//   return sizeof(mainMenuItems) / sizeof(mainMenuItems[0]);
+// }
+
+// void renderMenuScreen() {
+//   const char* title = getMenuTitle(currentMenuContext);
+//   const char* const* items = getMenuItems(currentMenuContext);
+//   uint8_t count = getMenuCount(currentMenuContext);
+
+//   if (count == 0) return;
+
+//   if (menuCursor >= count) menuCursor = 0;
+//   if (menuTop > menuCursor) menuTop = menuCursor;
+//   if (menuCursor >= menuTop + 4) menuTop = menuCursor - 3;
+
+//   display.clearDisplay();
+//   display.setTextSize(1);
+//   display.setTextColor(SSD1306_WHITE);
+
+//   display.setCursor(0, 0);
+//   display.println(title);
+
+//   for (uint8_t row = 0; row < 4; row++) {
+//     uint8_t idx = menuTop + row;
+//     if (idx >= count) break;
+
+//     display.setCursor(0, 14 + (row * 12));
+//     if (idx == menuCursor) display.print("> ");
+//     else display.print("  ");
+//     display.println(items[idx]);
+//   }
+
+//   display.display();
+// }
+
+// void menuBack() {
+//   if (currentMenuContext == MENU_MAIN) {
+//     enterNormalMode();
+//     return;
+//   }
+
+//   setMenuContext(MENU_MAIN);
+// }
+
+// void setMenuContext(MenuContext ctx) {
+//   currentMenuContext = ctx;
+//   menuCursor = 0;
+//   menuTop = 0;
+//   currentMode = MODE_MENU;
+//   touchActivity();
+//   renderMenuScreen();
+// }
+
+// void menuSelect() {
+//   switch (currentMenuContext) {
+//     case MENU_MAIN:
+//       switch (menuCursor) {
+//         case 0: setMenuContext(MENU_GIRIS); break;
+//         case 1: setMenuContext(MENU_STATUS); break;
+//         case 2: setMenuContext(MENU_TEST); break;
+//         case 3: setMenuContext(MENU_LOGS); break;
+//         case 4: setMenuContext(MENU_SETTINGS); break;
+//         case 5: setMenuContext(MENU_ABOUT); break;
+//       }
+//       break;
+
+//     case MENU_GIRIS:
+//       switch (menuCursor) {
+//         case 0: girisModuFP(); break;
+//         case 1: girisModuKart(); break;
+//         case 2: girisModuNo(); break;
+//         case 3: girisModuTum(); break;
+//         case 4: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_KAYIT:
+//       switch (menuCursor) {
+//         case 0: kayitOgrenciNoMenu(); break;
+//         case 1: kayitKartMenu(); break;
+//         case 2: kayitParmakIziMenu(); break;
+//         case 3: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_FP:
+//       switch (menuCursor) {
+//         case 0: fingerprintKayitMenu(); break;
+//         case 1: fingerprintSilMenu(); break;
+//         case 2: fingerprintTumunuSilMenu(); break;
+//         case 3: fingerprintDurumMenu(); break;
+//         case 4: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_USER:
+//       switch (menuCursor) {
+//         case 0: changePinMenu(); break;
+//         case 1: changeRfidMenu(); break;
+//         case 2: changeFpIdMenu(); break;
+//         case 3: changeOgrenciNoMenu(); break;
+//         case 4: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_STATUS:
+//       switch (menuCursor) {
+//         case 0: showGeneralStatusScreen(); break;
+//         case 1: showSensorStatusScreen(); break;
+//         case 2: showTimersScreen(); break;
+//         case 3: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_TEST:
+//       switch (menuCursor) {
+//         case 0: ledTest(); break;
+//         case 1: buzzerTest(); break;
+//         case 2: servoTest(); break;
+//         case 3: oledTest(); break;
+//         case 4: rfidTest(); break;
+//         case 5: fpTest(); break;
+//         case 6: keypadTest(); break;
+//         case 7: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_LOGS:
+//       switch (menuCursor) {
+//         case 0: showRecentLogsScreen(); break;
+//         case 1:
+//           if (confirmAction("LOGLAR", "Temizlensin mi?")) {
+//             clearLogs();
+//             oledYaz("LOGLAR", "Temizlendi", "");
+//             addLog("LOG CLEAR");
+//             delayWithTasks(1200);
+//           }
+//           break;
+//         case 2: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_SETTINGS:
+//       switch (menuCursor) {
+//         case 0: toggleAlarmMenu(); break;
+//         case 1: changeAccessDurationMenu(); break;
+//         case 2: changeDoorTimeoutMenu(); break;
+//         case 3: changeLockoutDurationMenu(); break;
+//         case 4: factoryDefaultsMenu(); break;
+//         case 5: menuBack(); break;
+//       }
+//       break;
+
+//     case MENU_ABOUT:
+//       switch (menuCursor) {
+//         case 0: aboutVersionScreen(); break;
+//         case 1: menuBack(); break;
+//       }
+//       break;
+//   }
+
+//   if (currentMode == MODE_MENU) {
+//     renderMenuScreen();
+//   }
+// }
+
+// void menuKontrol() {
+//   static unsigned long lastMoveMs = 0;
+
+//   char key = keypad.getKey();
+//   if (key == '*' || key == 'D') {
+//     menuBack();
+//     return;
+//   }
+//   if (key == '#') {
+//     menuSelect();
+//     return;
+//   }
+
+//   int x = analogRead(JOY_X);
+//   int y = analogRead(JOY_Y);
+
+//   if (millis() - lastMoveMs > 220UL) {
+//     uint8_t count = getMenuCount(currentMenuContext);
+//     const bool yNeutral = (y >= (int)JOY_Y_NEUTRAL_LO && y <=
+//     (int)JOY_Y_NEUTRAL_HI);
+
+//     if (y < 200) {
+//       if (menuCursor == 0) menuCursor = count - 1;
+//       else menuCursor--;
+//       touchActivity();
+//       renderMenuScreen();
+//       lastMoveMs = millis();
+//     }
+//     else if (y > 800) {
+//       menuCursor++;
+//       if (menuCursor >= count) menuCursor = 0;
+//       touchActivity();
+//       renderMenuScreen();
+//       lastMoveMs = millis();
+//     }
+//     else if (x > (int)JOY_X_SELECT_THRESHOLD && yNeutral) {
+//       touchActivity();
+//       menuSelect();
+//       lastMoveMs = millis();
+//     }
+//     else if (x < (int)JOY_X_BACK_THRESHOLD && yNeutral) {
+//       touchActivity();
+//       menuBack();
+//       lastMoveMs = millis();
+//     }
+//   }
+
+//   if (joySwIsPressed()) {
+//     waitJoyRelease();
+//     touchActivity();
+//     menuSelect();
+//     lastMoveMs = millis();
+//   }
+// }
+
+// // =====================================================
+// // CORE TASKS
+// // =====================================================
+// void updateNormalScreen() {
+//   if (currentMode != MODE_NORMAL) return;
+//   if (pinEntryActive) return;
+
+//   if (millis() - lastNormalRefreshMs >= 1000UL) {
+//     lastNormalRefreshMs = millis();
+//     normalEkrani();
+//   }
+// }
+
+// void updateAccessState() {
+//   if (currentMode != MODE_ACCESS) return;
+
+//   if (millis() - lastAccessRefreshMs >= 200UL) {
+//     lastAccessRefreshMs = millis();
+//     accessEkrani();
+//   }
+
+//   if (millis() - accessStartedAt >= cfg.accessDurationMs) {
+//     lockServo.write(SERVO_CLOSED_ANGLE);
+//     digitalWrite(GREEN_LED, LOW);
+
+//     failedAttempts = 0;
+//     Serial.println(F("ACCESS END"));
+//     addLog("ACCESS END");
+//     enterNormalMode();
+//   }
+// }
+
+// void updateDeniedState() {
+//   if (currentMode != MODE_DENIED) return;
+
+//   if (millis() - deniedStartedAt < 1200UL) {
+//     deniedEkrani();
+//     return;
+//   }
+
+//   buzzerOff();
+//   digitalWrite(RED_LED, LOW);
+//   enterNormalMode();
+// }
+
+// void updateLockoutState() {
+//   if (currentMode != MODE_LOCKOUT) return;
+
+//   if (millis() - lastLockoutRefreshMs >= 350UL) {
+//     lastLockoutRefreshMs = millis();
+
+//     static bool blink = false;
+//     blink = !blink;
+
+//     digitalWrite(RED_LED, blink ? HIGH : LOW);
+//     if (blink) buzzerOn();
+//     else buzzerOff();
+
+//     lockoutEkrani();
+//   }
+
+//   if (millis() >= lockoutUntil) {
+//     failedAttempts = 0;
+//     buzzerOff();
+//     digitalWrite(RED_LED, LOW);
+//     Serial.println(F("LOCKOUT END"));
+//     addLog("LOCKOUT END");
+//     enterMenuMode();
+//   }
+// }
+
+// void updateAlarmState() {
+//   if (currentMode != MODE_ALARM) return;
+//   if (!cfg.alarmEnabled) return;
+
+//   if (millis() - lastAlarmRefreshMs >= 250UL) {
+//     lastAlarmRefreshMs = millis();
+
+//     static bool blink = false;
+//     blink = !blink;
+
+//     digitalWrite(RED_LED, blink ? HIGH : LOW);
+//     if (blink) buzzerOn();
+//     else buzzerOff();
+
+//     alarmEkrani();
+//   }
+
+//   if (!kapiAcikMi() && (millis() - alarmStartedAt > 3000UL)) {
+//     buzzerOff();
+//     digitalWrite(RED_LED, LOW);
+//     Serial.println(F("ALARM END"));
+//     addLog("ALARM END");
+//     enterNormalMode();
+//   }
+// }
+
+// void updatePinEntryTimeout() {
+//   if (currentMode != MODE_NORMAL) return;
+//   if (!pinEntryActive) return;
+
+//   if (millis() - pinEntryLastInputMs >= cfg.pinEntryTimeoutMs) {
+//     clearPinEntry();
+//     normalEkrani();
+//   }
+// }
+
+// void doorMonitor() {
+//   if (!cfg.alarmEnabled) {
+//     doorOpenSince = 0;
+//     return;
+//   }
+
+//   if (currentMode != MODE_NORMAL) {
+//     doorOpenSince = 0;
+//     return;
+//   }
+
+//   if (kapiAcikMi()) {
+//     if (doorOpenSince == 0) {
+//       doorOpenSince = millis();
+//     } else if (millis() - doorOpenSince >= cfg.doorOpenTimeoutMs) {
+//       doorOpenSince = 0;
+//       enterAlarmMode("KAPI UZUN ACIK");
+//     }
+//   } else {
+//     doorOpenSince = 0;
+//   }
+// }
+
+// void updateCoreTasks() {
+//   doorMonitor();
+//   updatePinEntryTimeout();
+
+//   if (currentMode == MODE_NORMAL) {
+//     updateNormalScreen();
+//   } else if (currentMode == MODE_ACCESS) {
+//     updateAccessState();
+//   } else if (currentMode == MODE_DENIED) {
+//     updateDeniedState();
+//   } else if (currentMode == MODE_LOCKOUT) {
+//     updateLockoutState();
+//   } else if (currentMode == MODE_ALARM) {
+//     updateAlarmState();
+//   }
+
+//   updateBuzzer();
+
+// #if USE_BACKEND_AUTH
+//   // ESP32'ye periyodik PING gondererek web poll tetiklenir (5 saniyede bir)
+//   if (currentMode == MODE_MENU || currentMode == MODE_NORMAL) {
+//     if (millis() - lastPingMs > 5000UL) {
+//       lastPingMs = millis();
+//       ESP_LINK.println("PING");
+//     }
+//     checkWebScanRequest();
+//   }
+// #endif
+// }
+
+// // =====================================================
+// // ACCESS / DENIED
+// // =====================================================
+// void startAccess(const char* method) {
+//   if (currentMode != MODE_NORMAL) return;
+
+//   if (failedAttempts >= 3) {
+//     enterLockoutMode();
+//     return;
+//   }
+
+//   failedAttempts = 0;
+//   enterAccessMode(method);
+// }
+
+// void handleDenied(const char* reason) {
+//   if (currentMode != MODE_NORMAL) return;
+
+//   failedAttempts++;
+//   if (failedAttempts >= 3) {
+//     enterLockoutMode();
+//     return;
+//   }
+
+//   enterDeniedMode(reason);
+// }
+
+// // =====================================================
+// // RFID / PIN / FP
+// // =====================================================
+// void formatUid(byte* uidByte, byte size, char* out, size_t outSize) {
+//   uint8_t pos = 0;
+//   const char hexChars[] = "0123456789abcdef";
+//   out[0] = '\0';
+
+//   for (byte i = 0; i < size && pos < outSize - 1; i++) {
+//     if (i > 0 && pos < outSize - 1) {
+//       out[pos++] = ' ';
+//     }
+
+//     uint8_t b = uidByte[i];
+//     if (b < 0x10 && pos < outSize - 1) out[pos++] = '0';
+//     if (pos < outSize - 1) out[pos++] = hexChars[(b >> 4) & 0x0F];
+//     if (pos < outSize - 1) out[pos++] = hexChars[b & 0x0F];
+//   }
+
+//   out[pos] = '\0';
+// }
+
+// #if USE_BACKEND_AUTH
+// void formatUidCompact(byte* uidByte, byte size, char* out, size_t outSize) {
+//   uint8_t pos = 0;
+//   const char hexChars[] = "0123456789abcdef";
+//   out[0] = '\0';
+//   for (byte i = 0; i < size && pos < outSize - 1; i++) {
+//     uint8_t b = uidByte[i];
+//     if (b < 0x10 && pos < outSize - 1) out[pos++] = '0';
+//     if (pos < outSize - 1) out[pos++] = hexChars[(b >> 4) & 0x0F];
+//     if (pos < outSize - 1) out[pos++] = hexChars[b & 0x0F];
+//   }
+//   out[pos] = '\0';
+// }
+
+// bool espSunucuyaSor(const char* gonderSatir, char* yanit, size_t yanitBoy,
+// unsigned long timeoutMs) {
+//   while (ESP_LINK.available()) (void)ESP_LINK.read();
+//   ESP_LINK.print(gonderSatir);
+//   ESP_LINK.print('\n');
+//   size_t pos = 0;
+//   yanit[0] = '\0';
+//   unsigned long t0 = millis();
+//   while (millis() - t0 < timeoutMs) {
+//     updateCoreTasks();
+//     while (ESP_LINK.available()) {
+//       char c = ESP_LINK.read();
+//       if (c == '\r') continue;
+//       if (c == '\n') {
+//         yanit[pos] = '\0';
+//         return pos > 0;
+//       }
+//       if (pos < yanitBoy - 1) yanit[pos++] = c;
+//     }
+//   }
+//   yanit[pos] = '\0';
+//   return pos > 0;
+// }
+
+// void checkWebScanRequest() {
+//   if (ESP_LINK.available() > 0) {
+//     String cmd = ESP_LINK.readStringUntil('\n');
+//     cmd.trim();
+//     if (cmd == "WEB_SCAN_CARD") handleWebScanCard();
+//     else if (cmd == "WEB_SCAN_FP") handleWebScanFP();
+//   }
+// }
+
+// void handleWebScanCard() {
+//   oledYaz("WEB ISTEGI", "Kart bekleniyor", "D=Iptal");
+//   char uid[24];
+//   if (waitForRfidUid(uid, sizeof(uid), 25000UL)) {
+//     char compact[24];
+//     uidSpacedToCompact(uid, compact, sizeof(compact));
+//     char line[40];
+//     snprintf(line, sizeof(line), "UID:%s", compact);
+//     ESP_LINK.println(line); // ESP32 bunu yakalayip AuthController'a
+//     gonderir, o da Web'e iletir oledYaz("WEB OK", "Kart gonderildi",
+//     compact); beepKisa(); delayWithTasks(1200);
+//   }
+//   enterNormalMode();
+// }
+
+// void handleWebScanFP() {
+//   if (!fingerprintAvailable) return;
+
+//   uint8_t id = cfg.fpId;
+//   if (id > 127) {
+//     oledYaz("WEB HATA", "Hafiza Dolu", "");
+//     delayWithTasks(2000);
+//     enterNormalMode();
+//     return;
+//   }
+
+//   oledYaz("WEB ISTEGI", "Yeni parmak okut", "");
+
+//   if (fingerprintEnroll(id)) {
+//     cfg.fpId = id + 1;
+//     saveConfig();
+
+//     char line[24];
+//     snprintf(line, sizeof(line), "FP:%u", (unsigned)id);
+//     ESP_LINK.println(line);
+
+//     oledYaz("WEB OK", "Parmak eklendi", "");
+//     beepKisa();
+//     delayWithTasks(1200);
+//   } else {
+//     oledYaz("WEB HATA", "Kayit yapilmadi", "");
+//     delayWithTasks(2000);
+//   }
+//   enterNormalMode();
+// }
+// #endif
+
+// bool terminalVeriKaydiGonder(const char* msg, char* resp, size_t n) {
+// #if USE_BACKEND_AUTH
+//   return espSunucuyaSor(msg, resp, n, 20000UL);
+// #else
+//   (void)msg;
+//   if (resp && n > 0) resp[0] = '\0';
+//   return false;
+// #endif
+// }
+
+// void uidSpacedToCompact(const char* spaced, char* compact, size_t
+// compactSize) {
+//   size_t j = 0;
+//   if (!spaced || !compact || compactSize == 0) return;
+//   for (size_t i = 0; spaced[i] && j < compactSize - 1; i++) {
+//     if (spaced[i] != ' ') compact[j++] = (char)spaced[i];
+//   }
+//   compact[j] = '\0';
+// }
+
+// void rfidKontrol() {
+//   if (currentMode != MODE_NORMAL) return;
+
+//   if (!rfid.PICC_IsNewCardPresent()) return;
+//   if (!rfid.PICC_ReadCardSerial()) return;
+
+//   char uid[24];
+//   formatUid(rfid.uid.uidByte, rfid.uid.size, uid, sizeof(uid));
+// #if USE_BACKEND_AUTH
+//   char uidCompact[24];
+//   formatUidCompact(rfid.uid.uidByte, rfid.uid.size, uidCompact,
+//   sizeof(uidCompact));
+// #endif
+
+//   rfid.PICC_HaltA();
+//   rfid.PCD_StopCrypto1();
+
+//   Serial.print(F("RFID UID: "));
+//   Serial.println(uid);
+
+//   touchActivity();
+
+// #if USE_BACKEND_AUTH
+//   oledYaz("SUNUCU", "Kart kontrol...", uidCompact);
+//   char line[40];
+//   char resp[24];
+//   snprintf(line, sizeof(line), "UID:%s", uidCompact);
+//   if (espSunucuyaSor(line, resp, sizeof(resp), 12000UL) && strcmp(resp,
+//   "ONAYLANDI") == 0) {
+//     addLog("RFID NET OK");
+//     startAccess("RFID");
+//   } else {
+//     addLog("RFID NET RED");
+//     handleDenied("SUNUCU");
+//   }
+// #else
+//   if (cfg.uid[0] && strcmp(uid, cfg.uid) == 0) {
+//     addLog("RFID OK");
+//     startAccess("RFID");
+//   } else {
+//     addLog("RFID RED");
+//     handleDenied("RFID");
+//   }
+// #endif
+// }
+
+// void keypadKontrol() {
+//   if (currentMode != MODE_NORMAL) return;
+
+//   char key = keypad.getKey();
+//   if (!key) return;
+
+//   touchActivity();
+
+//   if (key >= '0' && key <= '9') {
+//     pinEntryActive = true;
+//     pinEntryLastInputMs = millis();
+
+//     if (pinLen < sizeof(enteredPIN) - 1) {
+//       enteredPIN[pinLen++] = key;
+//       enteredPIN[pinLen] = '\0';
+//     }
+
+//     char mask[24];
+//     uint8_t i;
+//     for (i = 0; i < pinLen && i < sizeof(mask) - 1; i++) mask[i] = '*';
+//     mask[pinLen] = '\0';
+
+// #if USE_BACKEND_AUTH
+//     oledYaz("NO GIRISI", mask, "#=Onay D=Menu");
+// #else
+//     oledYaz("PIN GIRISI", mask, "#=Onay D=Menu");
+// #endif
+//   }
+//   else if (key == '*') {
+//     clearPinEntry();
+//     normalEkrani();
+//   }
+//   else if (key == '#') {
+//     if (pinLen > 0) {
+// #if USE_BACKEND_AUTH
+//       if (pinLen >= 3) {
+//         char line[48];
+//         char resp[24];
+//         snprintf(line, sizeof(line), "PIN:%s", enteredPIN);
+//         oledYaz("SUNUCU", "Numara kontrol...", "");
+//         if (espSunucuyaSor(line, resp, sizeof(resp), 12000UL) && strcmp(resp,
+//         "ONAYLANDI") == 0) {
+//           addLog("PIN NET OK");
+//           clearPinEntry();
+//           startAccess("PIN");
+//         } else {
+//           addLog("PIN NET RED");
+//           clearPinEntry();
+//           handleDenied("PIN");
+//         }
+//       } else {
+//         clearPinEntry();
+//         normalEkrani();
+//       }
+// #else
+//       if (strcmp(enteredPIN, cfg.pin) == 0) {
+//         addLog("PIN OK");
+//         clearPinEntry();
+//         startAccess("PIN");
+//       } else {
+//         addLog("PIN RED");
+//         clearPinEntry();
+//         handleDenied("PIN");
+//       }
+// #endif
+//     } else {
+//       normalEkrani();
+//     }
+//   }
+//   else if (key == 'D') {
+//     clearPinEntry();
+//     enterMenuMode();
+//   }
+// }
+
+// void fingerprintKontrol() {
+//   if (currentMode != MODE_NORMAL) return;
+//   if (!fingerprintAvailable) return;
+// #if !USE_BACKEND_AUTH
+//   if (cfg.fpId == 0) return;
+// #endif
+
+//   uint8_t p = finger.getImage();
+//   if (p != FINGERPRINT_OK) return;
+
+//   touchActivity();
+
+//   p = finger.image2Tz();
+//   if (p != FINGERPRINT_OK) return;
+
+//   p = finger.fingerFastSearch();
+//   if (p == FINGERPRINT_OK) {
+// #if USE_BACKEND_AUTH
+//     char line[24];
+//     char resp[24];
+//     snprintf(line, sizeof(line), "FP:%u", (unsigned)finger.fingerID);
+//     oledYaz("SUNUCU", "Parmak izi...", "");
+//     if (espSunucuyaSor(line, resp, sizeof(resp), 12000UL) && strcmp(resp,
+//     "ONAYLANDI") == 0) {
+//       addLog("FP NET OK");
+//       startAccess("PARMAK IZI");
+//     } else {
+//       addLog("FP NET RED");
+//       handleDenied("FP");
+//     }
+// #else
+//     if (finger.fingerID == cfg.fpId) {
+//       addLog("FP OK");
+//       startAccess("PARMAK IZI");
+//     } else {
+//       addLog("FP RED");
+//       handleDenied("FP ID");
+//     }
+// #endif
+//   } else {
+//     addLog("FP NO");
+//     handleDenied("FP YOK");
+//   }
+// }
+
+// // =====================================================
+// // INPUT YARDIMCILARI
+// // =====================================================
+// bool readPinEntry(const char* title, char* outPin, size_t outSize, unsigned
+// long timeoutMs) {
+//   if (outSize < 5) return false;
+
+//   char buf[5] = {0};
+//   uint8_t len = 0;
+//   unsigned long start = millis();
+
+//   oledYaz(title, "4 HANELI PIN", "#=OK D=IPTAL");
+
+//   while (millis() - start < timeoutMs) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     char key = keypad.getKey();
+//     if (!key) continue;
+
+//     if (key >= '0' && key <= '9') {
+//       if (len < 4) {
+//         buf[len++] = key;
+//         buf[len] = '\0';
+//       }
+//     }
+//     else if (key == '*') {
+//       len = 0;
+//       buf[0] = '\0';
+//     }
+//     else if (key == 'D') {
+//       return false;
+//     }
+//     else if (key == '#') {
+//       if (len == 4) {
+//         strncpy(outPin, buf, outSize - 1);
+//         outPin[outSize - 1] = '\0';
+//         return true;
+//       }
+//     }
+
+//     oledYaz(title, buf, "#=OK D=IPTAL");
+//   }
+
+//   return false;
+// }
+
+// bool readNumberFromKeypad(const char* title, uint16_t minVal, uint16_t
+// maxVal, uint16_t &outVal, unsigned long timeoutMs) {
+//   char buf[4] = {0};
+//   uint8_t len = 0;
+//   unsigned long start = millis();
+
+//   oledYaz(title, "", "#=OK D=IPTAL");
+
+//   while (millis() - start < timeoutMs) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     char key = keypad.getKey();
+//     if (!key) continue;
+
+//     if (key >= '0' && key <= '9') {
+//       if (len < 3) {
+//         buf[len++] = key;
+//         buf[len] = '\0';
+//       }
+//     }
+//     else if (key == '*') {
+//       len = 0;
+//       buf[0] = '\0';
+//     }
+//     else if (key == 'D') {
+//       return false;
+//     }
+//     else if (key == '#') {
+//       if (len == 0) return false;
+
+//       int v = atoi(buf);
+//       if (v >= minVal && v <= maxVal) {
+//         outVal = (uint16_t)v;
+//         return true;
+//       }
+
+//       oledYaz("GECERSIZ", "Aralik disi", "");
+//       delayWithTasks(700);
+//       len = 0;
+//       buf[0] = '\0';
+//     }
+
+//     oledYaz(title, buf, "#=OK D=IPTAL");
+//   }
+
+//   return false;
+// }
+
+// bool readFlexibleDigitsKeypad(const char* title, char* out, size_t outSize,
+// uint8_t minLen, uint8_t maxLen, unsigned long timeoutMs) {
+//   if (outSize < 2 || maxLen < minLen || minLen < 1) return false;
+
+//   char buf[22] = {0};
+//   uint8_t len = 0;
+//   unsigned long start = millis();
+
+//   oledYaz(title, "", "#=OK D=IPTAL");
+
+//   while (millis() - start < timeoutMs) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     char key = keypad.getKey();
+//     if (!key) continue;
+
+//     if (key >= '0' && key <= '9') {
+//       if (len < maxLen && len < sizeof(buf) - 1) {
+//         buf[len++] = key;
+//         buf[len] = '\0';
+//       }
+//     } else if (key == '*') {
+//       len = 0;
+//       buf[0] = '\0';
+//     } else if (key == 'D') {
+//       return false;
+//     } else if (key == '#') {
+//       if (len >= minLen) {
+//         strncpy(out, buf, outSize - 1);
+//         out[outSize - 1] = '\0';
+//         return true;
+//       }
+//     }
+
+//     oledYaz(title, buf, "#=OK D=IPTAL");
+//   }
+
+//   return false;
+// }
+
+// bool waitForRfidUid(char* outUid, size_t outSize, unsigned long timeoutMs) {
+//   unsigned long start = millis();
+//   outUid[0] = '\0';
+
+//   oledYaz("RFID BEKLENIYOR", "Kart okutun", "D=Iptal");
+
+//   while (millis() - start < timeoutMs) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     char key = keypad.getKey();
+//     if (key == 'D') return false;
+
+//     if (!rfid.PICC_IsNewCardPresent()) continue;
+//     if (!rfid.PICC_ReadCardSerial()) continue;
+
+//     formatUid(rfid.uid.uidByte, rfid.uid.size, outUid, outSize);
+
+//     rfid.PICC_HaltA();
+//     rfid.PCD_StopCrypto1();
+//     return true;
+//   }
+
+//   return false;
+// }
+
+// // =====================================================
+// // FINGERPRINT
+// // =====================================================
+// bool fingerprintEnroll(uint8_t id) {
+//   if (!fingerprintAvailable) return false;
+
+//   int p;
+//   char slotBuf[16];
+//   snprintf(slotBuf, sizeof(slotBuf), "Slot: %u", (unsigned)id);
+
+//   // ---------- 1. Tarama ----------
+//   oledYaz("1/4 PARMAK KOY", slotBuf, "D=Iptal");
+//   unsigned long t0 = millis();
+//   while (true) {
+//     updateCoreTasks();
+//     touchActivity();
+//     if (keypad.getKey() == 'D') return false;
+//     if (millis() - t0 > 30000UL) { oledYaz("ZAMAN ASIMI", "Parmak beklendi",
+//     ""); delayWithTasks(1000); return false; } p = finger.getImage(); if (p
+//     == FINGERPRINT_OK) break; if (p != FINGERPRINT_NOFINGER) {
+//     oledYaz("GORUNTU HATASI", "Tekrar dene", ""); delayWithTasks(800); return
+//     false; }
+//   }
+
+//   // ---------- Goruntu Isleme 1 ----------
+//   oledYaz("2/4 ISLENIYOR", "Lutfen bekleyin", "");
+//   p = finger.image2Tz(1);
+//   if (p != FINGERPRINT_OK) { oledYaz("ISLEME HATASI", "Parmak net degil",
+//   ""); delayWithTasks(1000); return false; }
+
+//   // ---------- Parmak Kaldir ----------
+//   oledYaz("3/4 KALDIR", "Parmagi kaldirin", "");
+//   t0 = millis();
+//   while (true) {
+//     updateCoreTasks();
+//     touchActivity();
+//     if (keypad.getKey() == 'D') return false;
+//     if (millis() - t0 > 8000UL) { oledYaz("ZAMAN ASIMI", "Parmak
+//     kaldirilmadi", ""); delayWithTasks(800); return false; } if
+//     (finger.getImage() == FINGERPRINT_NOFINGER) break;
+//   }
+//   delayWithTasks(300);
+
+//   // ---------- 2. Tarama ----------
+//   oledYaz("4/4 TEKRAR KOY", slotBuf, "D=Iptal");
+//   t0 = millis();
+//   while (true) {
+//     updateCoreTasks();
+//     touchActivity();
+//     if (keypad.getKey() == 'D') return false;
+//     if (millis() - t0 > 30000UL) { oledYaz("ZAMAN ASIMI", "Parmak beklendi",
+//     ""); delayWithTasks(1000); return false; } p = finger.getImage(); if (p
+//     == FINGERPRINT_OK) break; if (p != FINGERPRINT_NOFINGER) {
+//     oledYaz("GORUNTU HATASI", "Tekrar dene", ""); delayWithTasks(800); return
+//     false; }
+//   }
+
+//   // ---------- Goruntu Isleme 2 ----------
+//   oledYaz("ESLESTIRILIYOR", "Lutfen bekleyin", "");
+//   p = finger.image2Tz(2);
+//   if (p != FINGERPRINT_OK) { oledYaz("ISLEME HATASI", "Parmak net degil",
+//   ""); delayWithTasks(1000); return false; }
+
+//   // ---------- Model Olustur ----------
+//   p = finger.createModel();
+//   if (p == FINGERPRINT_ENROLLMISMATCH) { oledYaz("ESLESMEDI", "Farkli
+//   parmak", "Tekrar deneyin"); delayWithTasks(1200); return false; } if (p !=
+//   FINGERPRINT_OK) { oledYaz("MODEL HATASI", "", ""); delayWithTasks(1000);
+//   return false; }
+
+//   // ---------- Kaydet ----------
+//   oledYaz("SENSORE KAYIT", slotBuf, "Bekleniyor...");
+//   p = finger.storeModel(id);
+//   if (p != FINGERPRINT_OK) { oledYaz("KAYIT HATASI", "Flash hatasi?", "");
+//   delayWithTasks(1000); return false; }
+
+//   return true;
+// }
+
+// void fingerprintKayitMenu() {
+//   if (!fingerprintAvailable) {
+//     oledYaz("FP KAYIT", "Sensor hazir degil", "");
+//     addLog("FP NO");
+//     delayWithTasks(1200);
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   // ADIM 1: FP sensor slot ID gir (1-127)
+//   uint16_t id = 0;
+//   if (!readNumberFromKeypad("FP SLOT ID", 1, 127, id, 30000UL)) {
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   // ADIM 2: Okul/sicil numarasini al (DB kaydi icin gerekli)
+//   char ogr[22] = {0};
+//   oledYaz("OGR NO GIRIN", "Okul/sicil no", "#=OK  D=Iptal");
+//   if (!readFlexibleDigitsKeypad("OGR NO (DB)", ogr, sizeof(ogr), 3, 20,
+//   45000UL)) {
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   // ADIM 3: Parmak izi fiziksel kaydi
+//   char slotStr[8];
+//   snprintf(slotStr, sizeof(slotStr), "%u", (unsigned)id);
+//   oledYaz("FP KAYIT", "Parmak okutun", slotStr);
+
+//   if (fingerprintEnroll((uint8_t)id)) {
+//     cfg.fpId = (uint8_t)id;
+//     saveConfig();
+//     addLog("FP SAVE");
+
+//     // ADIM 4: DB kaydi gonder
+//     char line[80];
+//     char resp[32];
+//     snprintf(line, sizeof(line), "ENR_FP|%s|%s", ogr, slotStr);
+//     oledYaz("SUNUCU", "DB kayit...", ogr);
+//     if (terminalVeriKaydiGonder(line, resp, sizeof(resp)) && strcmp(resp,
+//     "OK") == 0) {
+//       oledYaz("KAYIT TAMAM", ogr, slotStr);
+//       beepKisa();
+//     } else {
+//       // Fiziksel kayit basarili, DB kaydi basarisiz — yerel calisir
+//       oledYaz("FP OK", "DB HATA-Panel", slotStr);
+//       beepUzun();
+//     }
+//   } else {
+//     addLog("FP ERR");
+//     oledYaz("KAYIT HATASI", "Parmak tekrar", "");
+//     beepUzun();
+//   }
+
+//   delayWithTasks(1500);
+//   setMenuContext(MENU_FP);
+// }
+
+// void fingerprintSilMenu() {
+//   if (!fingerprintAvailable) {
+//     oledYaz("FP SIL", "Sensor hazir degil", "");
+//     delayWithTasks(1200);
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   uint16_t id = 0;
+//   if (!readNumberFromKeypad("Silinecek ID", 1, 127, id, 30000UL)) {
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   if (!confirmAction("FP SIL", "ID silinsin mi?")) {
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   int p = finger.deleteModel((uint8_t)id);
+//   if (p == FINGERPRINT_OK) {
+//     if (cfg.fpId == (uint8_t)id) {
+//       cfg.fpId = 0;
+//       saveConfig();
+//     }
+//     addLog("FP DEL");
+//     oledYaz("SILINDI", "Islem basarili", "");
+//     beepKisa();
+//   } else {
+//     addLog("FP DEL ERR");
+//     oledYaz("SILME HATASI", "", "");
+//     beepUzun();
+//   }
+
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_FP);
+// }
+
+// void fingerprintTumunuSilMenu() {
+//   if (!fingerprintAvailable) {
+//     oledYaz("FP SIL", "Sensor hazir degil", "");
+//     delayWithTasks(1200);
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   if (!confirmAction("FP SIL", "Tum veri silinsin mi?")) {
+//     setMenuContext(MENU_FP);
+//     return;
+//   }
+
+//   int p = finger.emptyDatabase();
+//   if (p == FINGERPRINT_OK) {
+//     cfg.fpId = 0;
+//     saveConfig();
+//     addLog("FP ALL DEL");
+//     oledYaz("TUMU SILINDI", "", "");
+//     beepKisa();
+//   } else {
+//     addLog("FP ALL ERR");
+//     oledYaz("SILME HATASI", "", "");
+//     beepUzun();
+//   }
+
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_FP);
+// }
+
+// void fingerprintDurumMenu() {
+//   char l2[22];
+//   char l3[22];
+//   snprintf(l2, sizeof(l2), "Sensor:%s", fingerprintAvailable ? "OK" : "YOK");
+//   snprintf(l3, sizeof(l3), "Aktif ID:%u", (unsigned)cfg.fpId);
+//   oledYaz("FP DURUM", l2, l3);
+//   delayWithTasks(1800);
+//   setMenuContext(MENU_FP);
+// }
+
+// // =====================================================
+// // KULLANICI AYARLARI
+// // =====================================================
+// void changePinMenu() {
+//   char p1[5] = {0};
+//   char p2[5] = {0};
+
+//   if (!readPinEntry("YENI PIN", p1, sizeof(p1), 30000UL)) {
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+
+//   if (!readPinEntry("PIN TEKRAR", p2, sizeof(p2), 30000UL)) {
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+
+//   if (strcmp(p1, p2) != 0) {
+//     oledYaz("PIN HATASI", "Eslesmedi", "");
+//     addLog("PIN ERR");
+//     beepUzun();
+//     delayWithTasks(1200);
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+
+//   strncpy(cfg.pin, p1, sizeof(cfg.pin) - 1);
+//   cfg.pin[sizeof(cfg.pin) - 1] = '\0';
+//   saveConfig();
+//   addLog("PIN SAVE");
+
+//   oledYaz("PIN KAYDEDILDI", cfg.pin, "");
+//   beepKisa();
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_USER);
+// }
+
+// void changeRfidMenu() {
+//   char ogr[22] = {0};
+//   if (!readFlexibleDigitsKeypad("OGR NO (DB)", ogr, sizeof(ogr), 3, 20,
+//   45000UL)) {
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+
+//   char uid[24];
+//   if (!waitForRfidUid(uid, sizeof(uid), 30000UL)) {
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+
+//   strncpy(cfg.uid, uid, sizeof(cfg.uid) - 1);
+//   cfg.uid[sizeof(cfg.uid) - 1] = '\0';
+//   saveConfig();
+//   addLog("RFID SAVE");
+
+//   char compact[24];
+//   uidSpacedToCompact(uid, compact, sizeof(compact));
+
+// #if USE_BACKEND_AUTH
+//   char line[88];
+//   char resp[32];
+//   snprintf(line, sizeof(line), "ENR_KART|%s|%s", ogr, compact);
+//   oledYaz("SUNUCU", "DB kayit...", "");
+//   if (terminalVeriKaydiGonder(line, resp, sizeof(resp)) && strcmp(resp, "OK")
+//   == 0) {
+//     oledYaz("DB+YEREL OK", compact, ogr);
+//   } else {
+//     oledYaz("DB HATA", "Yerel kayitli", compact);
+//   }
+// #else
+//   oledYaz("RFID KAYDEDILDI", cfg.uid, "");
+// #endif
+
+//   beepKisa();
+//   delayWithTasks(1800);
+//   setMenuContext(MENU_USER);
+// }
+
+// void changeFpIdMenu() {
+//   uint16_t id = 0;
+//   if (!readNumberFromKeypad("YENI FP ID", 1, 127, id, 30000UL)) {
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+
+//   cfg.fpId = (uint8_t)id;
+//   saveConfig();
+//   addLog("FP ID SAVE");
+
+//   char line[22];
+//   snprintf(line, sizeof(line), "ID:%u", (unsigned)cfg.fpId);
+//   oledYaz("FP ID KAYDEDILDI", line, "");
+//   beepKisa();
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_USER);
+// }
+
+// void changeOgrenciNoMenu() {
+// #if !USE_BACKEND_AUTH
+//   oledYaz("OKUL NO DB", "ESP modu kapali", "");
+//   delayWithTasks(1800);
+//   setMenuContext(MENU_USER);
+// #else
+//   char eski[22] = {0};
+//   char yeni[22] = {0};
+//   if (!readFlexibleDigitsKeypad("ESKI OGR.NO", eski, sizeof(eski), 3, 20,
+//   45000UL)) {
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+//   if (!readFlexibleDigitsKeypad("YENI OGR.NO", yeni, sizeof(yeni), 3, 20,
+//   45000UL)) {
+//     setMenuContext(MENU_USER);
+//     return;
+//   }
+
+//   char line[80];
+//   char resp[32];
+//   snprintf(line, sizeof(line), "ENR_NO|%s|%s", eski, yeni);
+//   oledYaz("SUNUCU", "No degisimi...", "");
+//   if (terminalVeriKaydiGonder(line, resp, sizeof(resp)) && strcmp(resp, "OK")
+//   == 0) {
+//     oledYaz("DB OK", "Numara guncellendi", "");
+//     beepKisa();
+//   } else {
+//     oledYaz("DB HATA", "Kontrol edin", "");
+//     beepUzun();
+//   }
+//   delayWithTasks(1600);
+//   setMenuContext(MENU_USER);
+// #endif
+// }
+
+// // =====================================================
+// // TESTLER
+// // =====================================================
+// void ledTest() {
+//   oledYaz("LED TEST", "Sira ile yanacak", "");
+//   digitalWrite(GREEN_LED, HIGH); delayWithTasks(300);
+//   digitalWrite(GREEN_LED, LOW);
+//   digitalWrite(RED_LED, HIGH); delayWithTasks(300);
+//   digitalWrite(RED_LED, LOW);
+//   digitalWrite(BLUE_LED, HIGH); delayWithTasks(300);
+//   digitalWrite(BLUE_LED, LOW);
+//   oledYaz("LED TEST", "Tamam", "");
+//   addLog("LED TEST");
+//   delayWithTasks(1000);
+//   setMenuContext(MENU_TEST);
+// }
+
+// void buzzerTest() {
+//   oledYaz("BUZZER TEST", "Kisa / uzun", "");
+//   beepKisa();
+//   delayWithTasks(250);
+//   beepUzun();
+//   delayWithTasks(1000);
+//   addLog("BZR TEST");
+//   setMenuContext(MENU_TEST);
+// }
+
+// void servoTest() {
+//   oledYaz("SERVO TEST", "Aciliyor", "");
+//   lockServo.write(SERVO_OPEN_ANGLE);
+//   delayWithTasks(1200);
+//   oledYaz("SERVO TEST", "Kapaniyor", "");
+//   lockServo.write(SERVO_CLOSED_ANGLE);
+//   delayWithTasks(1200);
+//   addLog("SERVO TEST");
+//   setMenuContext(MENU_TEST);
+// }
+
+// void oledTest() {
+//   oledYaz("OLED TEST", "Ekran calisiyor", "OK");
+//   addLog("OLED TEST");
+//   delayWithTasks(1500);
+//   setMenuContext(MENU_TEST);
+// }
+
+// void rfidTest() {
+//   char uid[24];
+//   oledYaz("RFID TEST", "Kart okutun", "D=Iptal");
+//   unsigned long start = millis();
+
+//   while (millis() - start < 10000UL) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     if (keypad.getKey() == 'D') break;
+
+//     if (!rfid.PICC_IsNewCardPresent()) continue;
+//     if (!rfid.PICC_ReadCardSerial()) continue;
+
+//     formatUid(rfid.uid.uidByte, rfid.uid.size, uid, sizeof(uid));
+//     rfid.PICC_HaltA();
+//     rfid.PCD_StopCrypto1();
+
+//     char l2[24];
+//     snprintf(l2, sizeof(l2), "UID: %s", uid);
+//     oledYaz("RFID OK", l2, "");
+//     addLog("RFID TEST");
+//     delayWithTasks(1800);
+//     setMenuContext(MENU_TEST);
+//     return;
+//   }
+
+//   oledYaz("RFID TEST", "Zaman asimi", "");
+//   delayWithTasks(1000);
+//   setMenuContext(MENU_TEST);
+// }
+
+// void fpTest() {
+//   if (!fingerprintAvailable) {
+//     oledYaz("FP TEST", "Sensor hazir degil", "");
+//     addLog("FP TEST NO");
+//     delayWithTasks(1200);
+//     setMenuContext(MENU_TEST);
+//     return;
+//   }
+
+//   oledYaz("FP TEST", "Parmak koyun", "D=Iptal");
+//   unsigned long start = millis();
+
+//   while (millis() - start < 10000UL) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     if (keypad.getKey() == 'D') break;
+
+//     uint8_t p = finger.getImage();
+//     if (p != FINGERPRINT_OK) continue;
+
+//     p = finger.image2Tz();
+//     if (p != FINGERPRINT_OK) continue;
+
+//     p = finger.fingerFastSearch();
+//     if (p == FINGERPRINT_OK) {
+//       char l2[22];
+//       snprintf(l2, sizeof(l2), "Bulunan ID:%u", (unsigned)finger.fingerID);
+//       oledYaz("FP TEST OK", l2, "");
+//       addLog("FP TEST OK");
+//     } else {
+//       oledYaz("FP TEST", "Eslesme yok", "");
+//       addLog("FP TEST NO");
+//     }
+
+//     delayWithTasks(1500);
+//     setMenuContext(MENU_TEST);
+//     return;
+//   }
+
+//   oledYaz("FP TEST", "Zaman asimi", "");
+//   delayWithTasks(1000);
+//   setMenuContext(MENU_TEST);
+// }
+
+// void keypadTest() {
+//   unsigned long start = millis();
+//   oledYaz("KEYPAD TEST", "Tus bas", "D=CIKIS");
+
+//   while (millis() - start < 15000UL) {
+//     updateCoreTasks();
+//     touchActivity();
+
+//     char key = keypad.getKey();
+//     if (!key) continue;
+
+//     if (key == 'D') break;
+
+//     char line[8] = {0};
+//     line[0] = key;
+//     line[1] = '\0';
+//     oledYaz("KEYPAD TEST", line, "D=CIKIS");
+//   }
+
+//   addLog("KEY TEST");
+//   setMenuContext(MENU_TEST);
+// }
+
+// // =====================================================
+// // AYARLAR
+// // =====================================================
+// void toggleAlarmMenu() {
+//   cfg.alarmEnabled = !cfg.alarmEnabled;
+//   saveConfig();
+
+//   char line[22];
+//   snprintf(line, sizeof(line), "Alarm:%s", cfg.alarmEnabled ? "ON" : "OFF");
+//   oledYaz("ALARM AYARI", line, "");
+//   addLog(cfg.alarmEnabled ? "ALARM ON" : "ALARM OFF");
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_SETTINGS);
+// }
+
+// void changeAccessDurationMenu() {
+//   uint16_t sec = 0;
+//   if (!readNumberFromKeypad("GIRIS SURE (sn)", 1, 30, sec, 30000UL)) {
+//     setMenuContext(MENU_SETTINGS);
+//     return;
+//   }
+
+//   cfg.accessDurationMs = sec * 1000UL;
+//   saveConfig();
+//   addLog("ACCESS TIME");
+
+//   char line[22];
+//   snprintf(line, sizeof(line), "%us", sec);
+//   oledYaz("GIRIS SURE", line, "");
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_SETTINGS);
+// }
+
+// void changeDoorTimeoutMenu() {
+//   uint16_t sec = 0;
+//   if (!readNumberFromKeypad("KAPI SURE (sn)", 5, 60, sec, 30000UL)) {
+//     setMenuContext(MENU_SETTINGS);
+//     return;
+//   }
+
+//   cfg.doorOpenTimeoutMs = sec * 1000UL;
+//   saveConfig();
+//   addLog("DOOR TIME");
+
+//   char line[22];
+//   snprintf(line, sizeof(line), "%us", sec);
+//   oledYaz("KAPI SURE", line, "");
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_SETTINGS);
+// }
+
+// void changeLockoutDurationMenu() {
+//   uint16_t sec = 0;
+//   if (!readNumberFromKeypad("LOCKOUT (sn)", 5, 60, sec, 30000UL)) {
+//     setMenuContext(MENU_SETTINGS);
+//     return;
+//   }
+
+//   cfg.lockoutDurationMs = sec * 1000UL;
+//   saveConfig();
+//   addLog("LOCK TIME");
+
+//   char line[22];
+//   snprintf(line, sizeof(line), "%us", sec);
+//   oledYaz("LOCKOUT SURE", line, "");
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_SETTINGS);
+// }
+
+// void factoryDefaultsMenu() {
+//   if (!confirmAction("FABRIKA AYAR", "Tum ayarlar sifirlansın mi?")) {
+//     setMenuContext(MENU_SETTINGS);
+//     return;
+//   }
+
+//   setDefaultConfig();
+//   saveConfig();
+//   addLog("DEFAULTS");
+
+//   oledYaz("FABRIKA AYAR", "Yuklendi", "");
+//   beepKisa();
+//   delayWithTasks(1200);
+//   setMenuContext(MENU_SETTINGS);
+// }
+
+// // =====================================================
+// // LOG
+// // =====================================================
+// void clearLogs() {
+//   memset(logs, 0, sizeof(logs));
+//   logHead = 0;
+//   logCount = 0;
+//   addLog("LOG EMPTY");
+// }
+
+// // =====================================================
+// // SECICI GIRIS MODLARI
+// // =====================================================
+
+// // Sadece parmak izi ile giris
+// void girisModuFP() {
+//   if (!fingerprintAvailable) {
+//     oledYaz("FP GIRIS", "Sensor yok!", "Menu'ye donuluyor");
+//     delayWithTasks(1500);
+//     setMenuContext(MENU_GIRIS);
+//     return;
+//   }
+//   activeEntryMode = ENTRY_FINGERPRINT;
+//   addLog("MOD:FP");
+//   enterNormalMode();
+// }
+
+// // Sadece kart ile giris
+// void girisModuKart() {
+//   activeEntryMode = ENTRY_CARD;
+//   addLog("MOD:KART");
+//   enterNormalMode();
+// }
+
+// // Sadece okul no (klavye) ile giris
+// void girisModuNo() {
+//   activeEntryMode = ENTRY_KEYPAD;
+//   addLog("MOD:NO");
+//   enterNormalMode();
+// }
+
+// // Tum sensorler ayni anda aktif (normal mod)
+// void girisModuTum() {
+//   activeEntryMode = ENTRY_NONE;
+//   addLog("MOD:TUM");
+//   enterNormalMode();
+// }
+
+// // =====================================================
+// // KAYIT FONKSIYONLARI
+// // =====================================================
+
+// // Yeni ogrenci (okul no) kaydet — veritabaninda yeni kullanici olustur
+// void kayitOgrenciNoMenu() {
+// #if !USE_BACKEND_AUTH
+//   oledYaz("OGR KAYIT", "ESP modu kapali", "");
+//   delayWithTasks(1800);
+//   setMenuContext(MENU_KAYIT);
+//   return;
+// #else
+//   char ogr[22] = {0};
+//   oledYaz("OGR NO KAYDET", "Okul numarasini", "#=OK  D=Iptal");
+//   delayWithTasks(800);
+//   if (!readFlexibleDigitsKeypad("OKUL NO", ogr, sizeof(ogr), 3, 20, 45000UL))
+//   {
+//     setMenuContext(MENU_KAYIT);
+//     return;
+//   }
+
+//   char line[48];
+//   char resp[16];
+//   snprintf(line, sizeof(line), "ENR_OGR|%s", ogr);
+//   oledYaz("SUNUCU", "Kayit yapiliyor", ogr);
+//   if (terminalVeriKaydiGonder(line, resp, sizeof(resp)) && strcmp(resp, "OK")
+//   == 0) {
+//     oledYaz("KAYIT TAMAM", ogr, "DB'ye eklendi");
+//     addLog("OGR SAVE");
+//     beepKisa();
+//   } else {
+//     oledYaz("KAYIT HATASI", "DB veya ESP", "kontrol edin");
+//     addLog("OGR ERR");
+//     beepUzun();
+//   }
+//   delayWithTasks(1800);
+//   setMenuContext(MENU_KAYIT);
+// #endif
+// }
+
+// // Var olan ogrenciye kart ata
+// void kayitKartMenu() {
+// #if !USE_BACKEND_AUTH
+//   oledYaz("KART KAYDET", "ESP modu kapali", "");
+//   delayWithTasks(1800);
+//   setMenuContext(MENU_KAYIT);
+//   return;
+// #else
+//   // 1. Okul no al
+//   char ogr[22] = {0};
+//   oledYaz("KART KAYDET", "Okul numarasini", "girin #=OK");
+//   delayWithTasks(600);
+//   if (!readFlexibleDigitsKeypad("OKUL NO", ogr, sizeof(ogr), 3, 20, 45000UL))
+//   {
+//     setMenuContext(MENU_KAYIT);
+//     return;
+//   }
+
+//   // 2. Kart okut
+//   char uid[24];
+//   if (!waitForRfidUid(uid, sizeof(uid), 30000UL)) {
+//     setMenuContext(MENU_KAYIT);
+//     return;
+//   }
+
+//   // 3. Kart no'sunu compact forma cevir
+//   char compact[24];
+//   uidSpacedToCompact(uid, compact, sizeof(compact));
+
+//   // 4. Sunucuya gonder
+//   char line[88];
+//   char resp[16];
+//   snprintf(line, sizeof(line), "ENR_KART|%s|%s", ogr, compact);
+//   oledYaz("SUNUCU", "Kart kayit...", ogr);
+//   if (terminalVeriKaydiGonder(line, resp, sizeof(resp)) && strcmp(resp, "OK")
+//   == 0) {
+//     oledYaz("KART KAYDEDILDI", ogr, compact);
+//     addLog("KART SAVE");
+//     beepKisa();
+//   } else {
+//     oledYaz("KAYIT HATASI", "Kullanici yok?", ogr);
+//     addLog("KART ERR");
+//     beepUzun();
+//   }
+//   delayWithTasks(2000);
+//   setMenuContext(MENU_KAYIT);
+// #endif
+// }
+
+// // Var olan ogrenciye parmak izi ata
+// void kayitParmakIziMenu() {
+//   if (!fingerprintAvailable) {
+//     oledYaz("FP KAYDET", "Sensor hazir degil", "");
+//     delayWithTasks(1200);
+//     setMenuContext(MENU_KAYIT);
+//     return;
+//   }
+
+//   // 1. Okul no al
+//   char ogr[22] = {0};
+//   oledYaz("FP KAYDET", "Okul numarasini", "girin #=OK");
+//   delayWithTasks(600);
+//   if (!readFlexibleDigitsKeypad("OKUL NO", ogr, sizeof(ogr), 3, 20, 45000UL))
+//   {
+//     setMenuContext(MENU_KAYIT);
+//     return;
+//   }
+
+//   // 2. FP slot ID gir (1-127)
+//   uint16_t id = 0;
+//   if (!readNumberFromKeypad("FP SLOT (1-127)", 1, 127, id, 30000UL)) {
+//     setMenuContext(MENU_KAYIT);
+//     return;
+//   }
+
+//   // 3. Parmak izi fiziksel kaydi
+//   char slotStr[8];
+//   snprintf(slotStr, sizeof(slotStr), "%u", (unsigned)id);
+
+//   if (fingerprintEnroll((uint8_t)id)) {
+//     cfg.fpId = (uint8_t)id;
+//     saveConfig();
+//     addLog("FP SAVE");
+
+//     // 4. DB kaydi gonder
+// #if USE_BACKEND_AUTH
+//     char line[80];
+//     char resp[16];
+//     snprintf(line, sizeof(line), "ENR_FP|%s|%s", ogr, slotStr);
+//     oledYaz("SUNUCU", "DB kayit...", ogr);
+//     if (terminalVeriKaydiGonder(line, resp, sizeof(resp)) && strcmp(resp,
+//     "OK") == 0) {
+//       oledYaz("FP+DB TAMAM", ogr, slotStr);
+//       beepKisa();
+//     } else {
+//       oledYaz("FP OK / DB?", "Panel'den kontrol", slotStr);
+//       beepUzun();
+//     }
+// #else
+//     oledYaz("FP KAYDEDILDI", slotStr, "");
+//     beepKisa();
+// #endif
+//   } else {
+//     addLog("FP ERR");
+//     oledYaz("KAYIT HATASI", "Parmak tekrar", "");
+//     beepUzun();
+//   }
+
+//   delayWithTasks(2000);
+//   setMenuContext(MENU_KAYIT);
+// }
+
+// // =====================================================
+// // SETUP / LOOP
+// // =====================================================
+// void setup() {
+//   Serial.begin(115200);
+// #if USE_BACKEND_AUTH
+//   ESP_LINK.begin(9600);
+// #endif
+
+//   pinMode(GREEN_LED, OUTPUT);
+//   pinMode(RED_LED, OUTPUT);
+//   pinMode(BLUE_LED, OUTPUT);
+//   pinMode(BUZZER, OUTPUT);
+
+//   // Reed switch: INPUT_PULLUP ile cekiliyor.
+//   // REED_ACTIVE_HIGH=0: pin HIGH = kapi KAPALI, pin LOW = kapi ACIK (NC reed
+//   switch icin)
+//   // REED_ACTIVE_HIGH=1: pin HIGH = kapi ACIK,   pin LOW = kapi KAPALI (NO
+//   reed switch icin) pinMode(REED_PIN, INPUT_PULLUP); pinMode(JOY_SW,
+//   INPUT_PULLUP);
+
+//   digitalWrite(GREEN_LED, LOW);
+//   digitalWrite(RED_LED, LOW);
+//   digitalWrite(BLUE_LED, LOW);
+//   digitalWrite(BUZZER, LOW);
+
+//   Wire.begin();
+//   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+//     while (1);
+//   }
+
+//   // Acilis mesaji
+//   oledYaz("HGS BASLIYOR", "Lutfen bekleyin", "...");
+//   delay(400);
+
+//   // RFID baslat — anten kazancini artir, okuma mesafesini iyilestir
+//   SPI.begin();
+//   rfid.PCD_Init();
+//   delay(50);
+//   rfid.PCD_SetAntennaGain(rfid.RxGain_max);
+//   Serial.print(F("RFID Firmware: "));
+//   rfid.PCD_DumpVersionToSerial();
+
+//   loadConfig();
+
+//   // Parmak izi: once 57600, cevap yoksa 9600 dene (klon moduller icin)
+//   oledYaz("FP SENSORU", "Kontrol ediliyor", "...");
+//   fingerprintAvailable = false;
+
+//   const uint32_t fpBauds[] = {57600UL, 9600UL, 19200UL, 38400UL, 115200UL};
+//   for (uint8_t bi = 0; bi < 5 && !fingerprintAvailable; bi++) {
+//     Serial1.begin(fpBauds[bi]);
+//     delay(500); // Daha uzun bekleme
+//     finger.begin(fpBauds[bi]);
+//     fingerprintAvailable = finger.verifyPassword();
+//     if (fingerprintAvailable) {
+//       Serial.print(F("Fingerprint OK @ baud="));
+//       Serial.println(fpBauds[bi]);
+//       addLog("FP OK");
+//     } else {
+//       Serial1.end();
+//     }
+//   }
+
+//   if (!fingerprintAvailable) {
+//     Serial.println(F("Fingerprint NOT FOUND - system continues"));
+//     addLog("FP NO");
+//     oledYaz("FP BULUNAMADI", "Kablosuz kontrol", "edin");
+//     delay(1000);
+//   } else {
+//     oledYaz("FP HAZIR", "Parmak izi OK", "");
+//     delay(600);
+//   }
+
+//   lockServo.attach(SERVO_PIN);
+//   lockServo.write(SERVO_CLOSED_ANGLE);
+
+//   lastActivityMs = millis();
+//   addLog("BOOT");
+//   enterMenuMode();
+// }
+
+// void loop() {
+//   updateCoreTasks();
+
+//   if (currentMode == MODE_MENU) {
+//     menuKontrol();
+//   }
+//   else if (currentMode == MODE_NORMAL) {
+//     // Secici mod: sadece secilen sensoru aktif et
+//     if (activeEntryMode == ENTRY_FINGERPRINT) {
+//       fingerprintKontrol();
+//       // D tusuna basilirsa menüye don
+//       char k = keypad.getKey();
+//       if (k == 'D') {
+//         activeEntryMode = ENTRY_NONE;
+//         setMenuContext(MENU_GIRIS);
+//       }
+//     } else if (activeEntryMode == ENTRY_CARD) {
+//       rfidKontrol();
+//       char k = keypad.getKey();
+//       if (k == 'D') {
+//         activeEntryMode = ENTRY_NONE;
+//         setMenuContext(MENU_GIRIS);
+//       }
+//     } else if (activeEntryMode == ENTRY_KEYPAD) {
+//       keypadKontrol();
+//       // keypadKontrol zaten D ile menüye gecer ama modu sifirla
+//     } else {
+//       // ENTRY_NONE: tüm sensorler
+//       rfidKontrol();
+//       keypadKontrol();
+//       fingerprintKontrol();
+//     }
+
+//     // Giris basariyla tamamlandiktan sonra MODE_ACCESS'e gecer,
+//     // access bitti mi kontrol et → menüye don (secici modda)
+//   }
+//   else if (currentMode == MODE_ACCESS || currentMode == MODE_DENIED) {
+//     // Access/Denied bittikten sonra (enterNormalMode cagrilir),
+//     // secici mod aktifse tekrar ayni mod ile Normal moda geri doner.
+//     // Bu zaten updateAccessState / updateDeniedState tarafindan yapilir.
+//     // Sadece secici modda menüye donmek icin MODE_NORMAL'e gectikten sonra
+//     // kontrol edeceğiz — bunu enterNormalMode() override edilmeden yapmak
+//     icin
+//     // burada ekstra kontrol gerekmez; mevcut akis yeterlidir.
+//   }
+// }
