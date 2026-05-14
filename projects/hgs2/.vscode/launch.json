@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-HgsApplication<HGS>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.HibritGirisSistemi.HGS.HgsApplication",
+            "projectName": "HGS",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

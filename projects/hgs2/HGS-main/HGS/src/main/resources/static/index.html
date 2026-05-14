@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hibrit Giriş Sistemi - Yönetim Paneli</title>
+    <link rel="stylesheet" href="/css/style.css">
+    
+</head>
+<body>
+
+    <!-- ========================================== -->
+    <!-- ÜST MENÜ / NAVİGASYON                      -->
+    <!-- ========================================== -->
+    <header>
+        <h1>Hibrit Giriş Sistemi (HGS)</h1>
+        <nav>
+            <ul>
+                <li><a href="#" onclick="menuyuGoster('dashboard')">Kontrol Paneli</a></li>
+                <li><a href="#" onclick="menuyuGoster('kullanicilar')">Kullanıcı Yönetimi</a></li>
+                <li><a href="#" onclick="menuyuGoster('cihazlar')">Terminal / Cihaz Yönetimi</a></li>
+                <li><a href="#" onclick="menuyuGoster('loglar')">Giriş Logları</a></li>
+                <li><a href="#" onclick="cikisYap()" style="color: #d9534f; font-weight: bold;">Çıkış Yap</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <!-- ========================================== -->
+        <!-- 1. KONTROL PANELİ VE SİMÜLASYON            -->
+        <!-- ========================================== -->
+        <section id="dashboard" class="sayfa-bolumu">
+            <h2>Kontrol Paneli</h2>
+            <p id="dashboardOzet">Sisteme hoş geldiniz. Veriler hesaplanıyor...</p>
+
+            <div class="info-panel">
+                <h3>Donanım ve API</h3>
+                <p class="info-panel-text">
+                    <strong>ESP32</strong> Mega ile seri (9600) konuşur; bu bilgisayarda çalışan Spring Boot API'sine HTTP ile bağlanır.
+                    <strong>Cihaz ID</strong> aşağıdaki tablodaki sayı ile aynı olmalıdır (ESP kodundaki <code>DEVICE_DB_ID</code>).
+                    Kart UID'si veritabanındaki <strong>Kart numarası</strong> ile eşleşmelidir (küçük harf, boşluksuz hex örn. <code>04e9b3a2</code>).
+                    Tuş takımında <strong>okul/sicil numarası</strong> girip <code>#</code> ile onaylayın. Parmak izi için kullanıcıya sensördeki <strong>slot numarasını</strong> kaydedin.
+                </p>
+                <p class="info-panel-api"><span>API kökü:</span> <code id="apiKokGoster"></code></p>
+            </div>
+            
+            <div class="simulation-card">
+                <h3>Geçiş Testi (Tarayıcıdan)</h3>
+                <p>ESP32 olmadan API uçlarını doğrudan test etmek için aşağıdaki yöntemlerden birini kullanın.</p>
+
+                <div class="sim-tabs">
+                    <button class="sim-tab active" id="tabKart" onclick="simTabSec('kart')">&#128266; Kart</button>
+                    <button class="sim-tab" id="tabNo" onclick="simTabSec('no')">&#128290; Okul No</button>
+                    <button class="sim-tab" id="tabFP" onclick="simTabSec('fp')">&#128406; Parmak İzi</button>
+                </div>
+
+                <!-- Kart -->
+                <div id="simPanelKart" class="sim-panel">
+                    <div class="simulation-form">
+                        <input type="text" id="simKartNo" placeholder="Kart UID (hex, örn: 04e9b3a2)">
+                        <input type="number" id="simCihazIdKart" placeholder="Cihaz ID" min="1" step="1">
+                        <button type="button" onclick="simulasyonCalistir('kart')" class="sim-btn">İsteği Gönder</button>
+                    </div>
+                </div>
+
+                <!-- Okul No -->
+                <div id="simPanelNo" class="sim-panel" style="display:none">
+                    <div class="simulation-form">
+                        <input type="text" id="simOkulNo" placeholder="Okul / Sicil Numarası">
+                        <input type="number" id="simCihazIdNo" placeholder="Cihaz ID" min="1" step="1">
+                        <button type="button" onclick="simulasyonCalistir('no')" class="sim-btn">İsteği Gönder</button>
+                    </div>
+                </div>
+
+                <!-- Parmak Izi -->
+                <div id="simPanelFP" class="sim-panel" style="display:none">
+                    <div class="simulation-form">
+                        <input type="text" id="simFPSlot" placeholder="Parmak İzi Slot No (örn: 1)">
+                        <input type="number" id="simCihazIdFP" placeholder="Cihaz ID" min="1" step="1">
+                        <button type="button" onclick="simulasyonCalistir('fp')" class="sim-btn">İsteği Gönder</button>
+                    </div>
+                </div>
+
+                <div id="simSonuc" class="sim-result"></div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 2. KULLANICI YÖNETİMİ BÖLÜMÜ               -->
+        <!-- ========================================== -->
+        <section id="kullanicilar" class="sayfa-bolumu" style="display: none;">
+            <h2>Kullanıcı Listesi</h2>
+            <p class="section-hint">Kart alanında UID'yi <strong>küçük harf, boşluksuz hex</strong> girin. Parmak izi için R307'deki <strong>slot numarasını</strong> kaydedin.</p>
+            <button onclick="yeniKullaniciEkle()">+ Yeni Kullanıcı Ekle</button>
+
+            <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Ad Soyad</th>
+                        <th>Okul/Sicil No</th>
+                        <th>Giriş Yöntemleri</th>
+                        <th>Rol</th>
+                        <th>Durum</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- JS ile dolacak -->
+                </tbody>
+            </table>
+            </div>
+
+            <!-- ============================================
+                 KULLANICI EKLE / DÜZENLE MODAL
+                 ============================================ -->
+            <div id="kullaniciModal" class="modal">
+                <div class="modal-icerik">
+                    <span class="kapat-btn" onclick="modaliKapat()">&times;</span>
+                    <h2 id="modalBaslik">Yeni Kullanıcı Ekle</h2>
+
+                    <form id="kullaniciFormu" onsubmit="kullaniciKaydet(event)">
+                        <input type="hidden" id="formKullaniciId">
+
+                        <div class="form-grup">
+                            <label>Ad Soyad:</label>
+                            <input type="text" id="formAdSoyad" required>
+                        </div>
+
+                        <div class="form-grup">
+                            <label>Okul/Sicil No:</label>
+                            <input type="text" id="formNo" required>
+                        </div>
+
+                        <!-- KART ALANI + SENSOR BUTONU -->
+                        <div class="form-grup">
+                            <label>Kart Numarası (RFID):</label>
+                            <div class="sensor-input-row">
+                                <input type="text" id="formKartNo" placeholder="Örn: 04e9b3a2  —  veya sağdaki butona basın">
+                                <button type="button" class="sensor-btn" id="btnSensorKart"
+                                        onclick="sensorOturumBaslat('CARD','formKartNo','btnSensorKart')">
+                                    &#128225; Kart Okut
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- PARMAK İZİ ALANI + SENSOR BUTONU -->
+                        <div class="form-grup">
+                            <label>Parmak izi sensör slotu (R307 ID):</label>
+                            <div class="sensor-input-row">
+                                <input type="text" id="formParmakIziSlot" maxlength="10"
+                                       placeholder="Örn: 1  —  veya sağdaki butona basın">
+                                <button type="button" class="sensor-btn" id="btnSensorFP"
+                                        onclick="sensorOturumBaslat('FINGERPRINT','formParmakIziSlot','btnSensorFP')">
+                                    &#128406; Parmak Okut
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-grup">
+                            <label>Rol:</label>
+                            <select id="formRol">
+                                <option value="Öğrenci">Öğrenci</option>
+                                <option value="Personel">Personel</option>
+                                <option value="Güvenlik">Güvenlik</option>
+                            </select>
+                        </div>
+
+                        <div class="form-grup">
+                            <label>Durum:</label>
+                            <select id="formDurum">
+                                <option value="Aktif">Aktif</option>
+                                <option value="Pasif">Pasif</option>
+                            </select>
+                        </div>
+
+                        <div id="formUyari" class="form-uyari" style="display:none"></div>
+
+                        <button type="submit" class="kaydet-btn">Kaydet</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ============================================
+                 SENSÖR BEKLEME OVERLAY (kendi modal'ı)
+                 ============================================ -->
+            <div id="sensorModal" class="modal">
+                <div class="sensor-modal-icerik">
+                    <div class="sensor-pulse-anim">
+                        <span id="sensorIconBig">&#128225;</span>
+                    </div>
+                    <h3 id="sensorModalBaslik">Kart Bekleniyor...</h3>
+                    <p id="sensorModalAciklama">Arduino'daki kart okuyucuya kartınızı yaklaştırın.</p>
+                    <div class="sensor-timer-bar">
+                        <div class="sensor-timer-fill" id="sensorTimerFill"></div>
+                    </div>
+                    <p class="sensor-countdown" id="sensorCountdown">30 sn kaldı</p>
+                    <button type="button" class="sensor-iptal-btn" onclick="sensorIptal()">&#10006; İptal</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 3. TERMİNAL VE CİHAZ YÖNETİMİ BÖLÜMÜ       -->
+        <!-- ========================================== -->
+        <section id="cihazlar" class="sayfa-bolumu" style="display: none;">
+            <h2>Terminal ve Cihaz Yönetimi</h2>
+            <p class="section-hint">Tablodaki <strong>Cihaz ID</strong> değerini ESP32 kodundaki <code>DEVICE_DB_ID</code> ile aynı tutun.</p>
+            <button onclick="yeniCihazEkle()">+ Yeni Cihaz Ekle</button>
+            
+            <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Cihaz ID</th>
+                        <th>Cihaz Adı</th>
+                        <th>Konum</th>
+                        <th>IP Adresi</th>
+                        <th>Durum</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody id="cihazTablosuGovdesi">
+                    <!-- JS ile dolacak -->
+                </tbody>
+            </table>
+            </div>
+
+            <!-- Cihaz Ekle/Duzenle Modal -->
+            <div id="cihazModal" class="modal">
+                <div class="modal-icerik">
+                    <span class="kapat-btn" onclick="cihazModaliKapat()">&times;</span>
+                    <h2 id="modalCihazBaslik">Yeni Cihaz Ekle</h2>
+
+                    <form id="cihazFormu" onsubmit="cihazKaydet(event)">
+                        <input type="hidden" id="formCihazId">
+
+                        <div class="form-grup">
+                            <label>Cihaz Adı:</label>
+                            <input type="text" id="formCihazAd" required placeholder="Örn: Ana Turnike">
+                        </div>
+
+                        <div class="form-grup">
+                            <label>Konum:</label>
+                            <input type="text" id="formCihazKonum" required placeholder="Örn: A Blok Girişi">
+                        </div>
+
+                        <div class="form-grup">
+                            <label>IP Adresi:</label>
+                            <input type="text" id="formCihazIp" required placeholder="Örn: 192.168.1.100">
+                        </div>
+
+                        <div class="form-grup">
+                            <label>Durum:</label>
+                            <select id="formCihazDurum">
+                                <option value="Aktif">Aktif</option>
+                                <option value="Pasif">Pasif</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="kaydet-btn">Cihazı Kaydet</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 4. GİRİŞ LOGLARI BÖLÜMÜ                    -->
+        <!-- ========================================== -->
+        <section id="loglar" class="sayfa-bolumu" style="display: none;">
+            <h2>Son Giriş Hareketleri</h2>
+
+            <div class="filtre-alani">
+                <input type="number" id="filtreKullanici" placeholder="Kullanıcı ID girin...">
+                <select id="filtreSonuc">
+                    <option value="">Tüm Sonuçlar</option>
+                    <option value="ONAYLANDI">Sadece Onaylananlar</option>
+                    <option value="REDDEDILDI">Sadece Reddedilenler</option>
+                </select>
+                <button onclick="logFiltrele()">Filtrele</button>
+                <button onclick="filtreyiTemizle()" class="edit-btn">Temizle</button>
+            </div>
+
+            <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Tarih / Saat</th>
+                        <th>Cihaz ID</th>
+                        <th>Kullanıcı ID</th>
+                        <th>Yöntem</th>
+                        <th>Sonuç</th>
+                        <th>Açıklama</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- JS ile dolacak -->
+                </tbody>
+            </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/script.js"></script>
+</body>
+</html>
