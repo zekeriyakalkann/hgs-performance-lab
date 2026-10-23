@@ -3,7 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from hgs2_lab.config import ConfigError, LabConfig, load_config
+from hgs2_lab.config import (
+    HARD_MAX_DURATION_SECONDS,
+    HARD_MAX_REQUESTS,
+    ConfigError,
+    LabConfig,
+    RunLimits,
+    load_config,
+)
 
 
 def write(tmp_path, data, name="config.json"):
@@ -106,6 +113,48 @@ def test_direct_construction_validates():
         LabConfig(base_url="http://x", timeout_seconds=float("nan"))
     with pytest.raises(ConfigError):
         LabConfig(base_url="http://x", output_dir="results")  # Path değil
+
+
+def test_limits_default_when_omitted(tmp_path):
+    limits = load_config(write(tmp_path, {"base_url": "http://x"})).limits
+    assert limits == RunLimits()
+    assert (limits.max_requests, limits.max_duration_seconds) == (1000, 600.0)
+
+
+def test_limits_override(tmp_path):
+    cfg = load_config(write(tmp_path, {"base_url": "http://x", "limits": {
+        "max_requests": 50, "max_duration_seconds": 30, "max_consecutive_transport_errors": 2,
+        "max_error_rate": 0.25, "error_rate_min_requests": 4,
+    }}))
+    assert cfg.limits == RunLimits(50, 30, 2, 0.25, 4)
+
+
+@pytest.mark.parametrize(
+    "limits",
+    [
+        [],
+        {"bilinmeyen": 1},
+        {"max_requests": 0},
+        {"max_requests": True},
+        {"max_requests": 2.5},
+        {"max_requests": HARD_MAX_REQUESTS + 1},  # sabit tavan aşılamaz
+        {"max_duration_seconds": 0},
+        {"max_duration_seconds": float("inf")},
+        {"max_duration_seconds": HARD_MAX_DURATION_SECONDS + 1},
+        {"max_consecutive_transport_errors": 0},
+        {"max_error_rate": 0},
+        {"max_error_rate": 1.5},
+        {"max_error_rate": float("nan")},
+        {"error_rate_min_requests": 0},
+    ],
+)
+def test_invalid_limits_rejected(tmp_path, limits):
+    with pytest.raises(ConfigError, match="limits"):
+        load_config(write(tmp_path, {"base_url": "http://x", "limits": limits}))
+
+
+def test_hard_caps_are_accepted_exactly():
+    assert RunLimits(max_requests=HARD_MAX_REQUESTS, max_duration_seconds=HARD_MAX_DURATION_SECONDS)
 
 
 def test_to_dict_has_no_extra_fields():

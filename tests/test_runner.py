@@ -1,7 +1,7 @@
 import pytest
 
 from hgs2_lab.models import InvalidRunId
-from hgs2_lab.runner import ScenarioRunner
+from hgs2_lab.runner import RunStopped, ScenarioRunner
 from hgs2_lab.scenarios import Scenario
 from hgs2_lab.transport import (
     TransportConnectionError,
@@ -167,6 +167,53 @@ def test_constructor_validates_run_id_and_timeout():
     for bad in (0, -1, float("nan"), float("inf"), True, "5"):
         with pytest.raises(ValueError):
             ScenarioRunner(transport, "http://h", "r1", bad, clock=clock)
+
+
+# Güvenlik kancaları
+class RecordingGuard:
+    def __init__(self, stop_after=None):
+        self.events = []
+        self._stop_after = stop_after
+
+    def before_request(self):
+        self.events.append("before")
+
+    def after_result(self, result):
+        self.events.append(("after", result.seq))
+        if self._stop_after == result.seq:
+            raise RunStopped("test", "dur")
+
+
+def test_guard_is_called_around_every_request_including_warmups():
+    clock = FakeClock()
+    guard = RecordingGuard()
+    runner = ScenarioRunner(FakeTransport(clock, [(1, TransportResponse(200))] * 3), "http://h", "r1", 1.0,
+                            sleep=lambda s: None, clock=clock, guard=guard)
+    runner.run(scenario(repetitions=2, warmup_repetitions=1))
+    assert guard.events == ["before", ("after", 1), "before", ("after", 2), "before", ("after", 3)]
+
+
+def test_guard_stop_keeps_completed_results_and_duration():
+    clock = FakeClock()
+    transport = FakeTransport(clock, [(10, TransportResponse(200))] * 5)
+    runner = ScenarioRunner(transport, "http://h", "r1", 1.0, sleep=lambda s: None, clock=clock,
+                            guard=RecordingGuard(stop_after=2))
+    with pytest.raises(RunStopped) as info:
+        runner.run(scenario(repetitions=5))
+    assert info.value.reason == "test"
+    assert [r.seq for r in runner.results] == [1, 2]  # durduran isteğin kaydı korunur
+    assert len(transport.calls) == 2
+    assert runner.monotonic_duration_ms == 20.0  # kesintide de gerçek süre
+
+
+def test_results_accumulate_across_scenarios_and_survive_exceptions():
+    runner, _ = make_runner([(1, TransportResponse(200)), (1, KeyboardInterrupt())])
+    runner.run(scenario(name="a"))
+    with pytest.raises(KeyboardInterrupt):
+        runner.run(scenario(name="b"))
+    assert [r.scenario for r in runner.results] == ["a"]
+    runner.results.clear()  # kopya döner; iç liste etkilenmez
+    assert len(runner.results) == 1
 
 
 # Şema v2: seq, offset_ms, warmup

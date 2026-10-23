@@ -10,6 +10,9 @@
 * Şema sürümünün yetkili kaynağı JSON'daki üst düzey `schema_version`'dır; CSV'de
   sürüm sütunu yoktur. Yalnızca SCHEMA_VERSION okunur; eski sürümler açık bir
   hatayla reddedilir (dönüştürme yoktur).
+* Tamamlanmamış çalıştırmalar (`partial=True`) `<run_id>.partial.csv/json` adıyla yazılır;
+  yarım sonuçlar dosya adından da ayırt edilir. Bir run_id için tam ya da kısmi dosyalardan
+  herhangi biri varsa hiçbir dosya yazılmaz.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from .models import RawResult, validate_run_id
 
 SCHEMA_VERSION = 2
 _RESERVED_METADATA_KEYS = frozenset({"schema_version", "run_id", "results"})
+_PARTIAL_SUFFIX = ".partial"
 # Şema v1 CSV başlığı; yalnızca anlaşılır bir uyumsuzluk hatası vermek için tutulur.
 _V1_CSV_FIELDS = [
     "run_id", "scenario", "iteration", "method", "url", "started_at", "elapsed_ms", "duration_ms",
@@ -111,17 +115,24 @@ class ResultStore:
     def __init__(self, output_dir: str | Path) -> None:
         self._dir = Path(output_dir)
 
-    def paths(self, run_id: str) -> tuple[Path, Path]:
+    def paths(self, run_id: str, partial: bool = False) -> tuple[Path, Path]:
         validate_run_id(run_id)
-        return self._dir / f"{run_id}.csv", self._dir / f"{run_id}.json"
+        stem = f"{run_id}{_PARTIAL_SUFFIX}" if partial else run_id
+        return self._dir / f"{stem}.csv", self._dir / f"{stem}.json"
+
+    def existing_files(self, run_id: str) -> list[Path]:
+        """Bu run_id için var olan tam veya kısmi sonuç dosyaları."""
+        return [p for partial in (False, True) for p in self.paths(run_id, partial) if p.exists()]
 
     def save(
         self,
         run_id: str,
         results: Iterable[RawResult],
         metadata: dict[str, Any] | None = None,
+        *,
+        partial: bool = False,
     ) -> tuple[Path, Path]:
-        csv_path, json_path = self.paths(run_id)  # run_id doğrulaması burada
+        csv_path, json_path = self.paths(run_id, partial)  # run_id doğrulaması burada
         metadata = dict(metadata or {})
         reserved = sorted(_RESERVED_METADATA_KEYS & metadata.keys())
         if reserved:
@@ -140,9 +151,9 @@ class ResultStore:
         json_text = json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False)
         csv_text = _render_csv(rows)
 
-        for path in (csv_path, json_path):
-            if path.exists():
-                raise ResultExistsError(f"Sonuç dosyası zaten var, üzerine yazılmaz: {path}")
+        existing = self.existing_files(run_id)
+        if existing:
+            raise ResultExistsError(f"Sonuç dosyası zaten var, üzerine yazılmaz: {existing[0]}")
 
         tmp_csv = csv_path.with_name(f"{csv_path.name}.{os.getpid()}.tmp")
         tmp_json = json_path.with_name(f"{json_path.name}.{os.getpid()}.tmp")
@@ -164,8 +175,8 @@ class ResultStore:
             tmp_json.unlink(missing_ok=True)
         return csv_path, json_path
 
-    def load_json(self, run_id: str) -> StoredRun:
-        _, json_path = self.paths(run_id)
+    def load_json(self, run_id: str, partial: bool = False) -> StoredRun:
+        _, json_path = self.paths(run_id, partial)
         try:
             document = json.loads(json_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError) as exc:
@@ -193,8 +204,8 @@ class ResultStore:
         metadata = {k: v for k, v in document.items() if k != "results"}
         return StoredRun(metadata=metadata, results=results)
 
-    def load_csv(self, run_id: str) -> list[RawResult]:
-        csv_path, _ = self.paths(run_id)
+    def load_csv(self, run_id: str, partial: bool = False) -> list[RawResult]:
+        csv_path, _ = self.paths(run_id, partial)
         try:
             with csv_path.open(encoding="utf-8", newline="") as f:
                 reader = csv.DictReader(f)

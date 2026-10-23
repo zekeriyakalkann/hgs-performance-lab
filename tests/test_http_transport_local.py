@@ -25,7 +25,9 @@ from local_http_server import (
     LOOPBACK,
     SLOW_BODY_DELAY_SECONDS,
     SLOW_BODY_PARTS,
+    ExternalNetworkBlocked,
     LocalHTTPServer,
+    install_network_guard,
 )
 from urllib3.exceptions import ReadTimeoutError
 
@@ -43,37 +45,11 @@ BLACKHOLE_PROXY_URL = f"http://{BLACKHOLE[0]}:{BLACKHOLE[1]}"
 PROXY_ENV_NAMES = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
 
 
-class ExternalNetworkBlocked(AssertionError):
-    """Test, 127.0.0.1 dışındaki bir adrese bağlanmaya çalıştı."""
-
-
 @pytest.fixture(autouse=True)
 def block_external_network(monkeypatch):
-    attempts = []
-    # Bağlantısı reddedilen soketler. Çağıran kod (ör. urllib3 create_connection) yalnızca
-    # OSError'da soketi kapatır; ExternalNetworkBlocked'da kapatmaz. Bu soketler hiçbir yere
-    # bağlanmamıştır ve amaçlarına kullanılamaz; koruma onları test bitince kendisi kapatır.
-    blocked_sockets = []
-    real_connect = socket.socket.connect
-    real_connect_ex = socket.socket.connect_ex
-
-    def check(sock, address):
-        if not (isinstance(address, tuple) and address and address[0] == LOOPBACK):
-            attempts.append(address)
-            blocked_sockets.append(sock)
-            raise ExternalNetworkBlocked(f"127.0.0.1 dışına bağlantı engellendi: {address!r}")
-
-    def guarded_connect(self, address):
-        check(self, address)
-        return real_connect(self, address)
-
-    def guarded_connect_ex(self, address):
-        check(self, address)
-        return real_connect_ex(self, address)
-
-    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
-    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+    attempts, blocked_sockets = install_network_guard(monkeypatch)
     yield attempts
+    # Reddedilen soketler hiçbir yere bağlanmadı; çağıran onları kapatmadığı için burada kapatılır.
     for sock in blocked_sockets:
         sock.close()  # kapalı sokette etkisizdir
 
@@ -221,11 +197,15 @@ def test_environment_proxy_is_ignored(server, hostile_proxy_env, block_external_
 
 def test_control_trust_env_session_would_use_proxy(server, hostile_proxy_env, block_external_network):
     """Kontrol: ortam proxy'si bu ortamda gerçekten etkin; trust_env=True olsaydı istek proxy'ye
-    yönelirdi. Koruma bağlantıyı kurulmadan engeller. Bu test olmadan önceki test boşuna geçebilirdi."""
+    yönelirdi. Koruma bağlantıyı kurulmadan engeller. Bu test olmadan önceki test boşuna geçebilirdi.
+
+    RequestsTransport artık trust_env=True bir oturumu kabul etmediği için kontrol düz requests ile yapılır."""
     session = requests.Session()  # trust_env=True (requests varsayılanı)
     try:
+        with pytest.raises(ValueError, match="trust_env"):
+            RequestsTransport(session=session)  # taşıyıcı bu oturumu reddeder
         with pytest.raises(ExternalNetworkBlocked):
-            send(RequestsTransport(session=session), server, scenario("/hello"))
+            session.get(server.base_url + "/hello", timeout=SAFE_TIMEOUT)
     finally:
         session.close()
     assert block_external_network == [BLACKHOLE]

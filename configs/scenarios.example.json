@@ -4,6 +4,7 @@
       "name": "placeholder-get",
       "method": "GET",
       "path": "/example/endpoint",
+      "warmup_repetitions": 2,
       "repetitions": 10,
       "delay_seconds": 0.1,
       "expected_status": [200]

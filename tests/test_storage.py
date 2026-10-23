@@ -164,6 +164,28 @@ def test_csv_cell_representation(tmp_path):
     assert "schema_version" not in rows[0]  # CSV'de sürüm sütunu yok; yetkili kaynak JSON
 
 
+def test_partial_results_use_distinct_file_names_and_load_back(tmp_path):
+    store = ResultStore(tmp_path)
+    csv_path, json_path = store.save("r1", sample_results(), META, partial=True)
+    assert (csv_path.name, json_path.name) == ("r1.partial.csv", "r1.partial.json")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["r1.partial.csv", "r1.partial.json"]
+    assert store.load_json("r1", partial=True).results == sample_results()
+    assert store.load_csv("r1", partial=True) == sample_results()
+    with pytest.raises(StorageError):
+        store.load_json("r1")  # tam sonuç yok; kısmi sonuç tam gibi okunmaz
+
+
+@pytest.mark.parametrize("first_partial, second_partial", [(True, False), (False, True), (True, True)])
+def test_complete_and_partial_files_block_each_other(tmp_path, first_partial, second_partial):
+    store = ResultStore(tmp_path)
+    store.save("r1", sample_results(), META, partial=first_partial)
+    before = sorted((p.name, p.read_bytes()) for p in tmp_path.iterdir())
+    with pytest.raises(ResultExistsError):
+        store.save("r1", sample_results(), META, partial=second_partial)
+    assert sorted((p.name, p.read_bytes()) for p in tmp_path.iterdir()) == before
+    assert len(store.existing_files("r1")) == 2
+
+
 def test_schema_version_is_2():
     assert SCHEMA_VERSION == 2
 

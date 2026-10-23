@@ -1,6 +1,13 @@
 {
-  "base_url": "http://localhost:8080",
+  "base_url": "http://127.0.0.1:8080",
   "timeout_seconds": 10,
   "output_dir": "../results",
-  "scenarios_file": "scenarios.example.json"
+  "scenarios_file": "scenarios.example.json",
+  "limits": {
+    "max_requests": 1000,
+    "max_duration_seconds": 600,
+    "max_consecutive_transport_errors": 5,
+    "max_error_rate": 0.5,
+    "error_rate_min_requests": 20
+  }
 }

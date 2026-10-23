@@ -13,6 +13,11 @@ Yalnızca `TransportError` ailesi ölçüm kaydına çevrilir. Diğer tüm
 istisnalar (programlama hataları dahil) olduğu gibi yayılır.
 
 Kayda yazılan URL ve hata mesajındaki hassas değerler maskelenir (bkz. sanitize.py).
+
+İsteğe bağlı `guard`: her istekten önce `before_request()`, her kayıttan sonra
+`after_result(result)` çağrılır; `RunStopped` fırlatarak çalıştırmayı kontrollü
+durdurabilir. Tamamlanan kayıtlar `results` ile her zaman (kesinti sonrasında da)
+okunabilir.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Protocol
 
 from ._validate import require_number
 from .models import RawResult, validate_run_id
@@ -40,6 +46,20 @@ def _describe(exc: Exception) -> str:
     return f"{name}: {message}" if message else name
 
 
+class RunStopped(Exception):
+    """Bir güvenlik sınırı nedeniyle çalıştırma kontrollü olarak durduruldu."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+class RunGuard(Protocol):
+    def before_request(self) -> None: ...
+
+    def after_result(self, result: RawResult) -> None: ...
+
+
 class ScenarioRunner:
     def __init__(
         self,
@@ -50,6 +70,7 @@ class ScenarioRunner:
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], str] = _utc_now_iso,
         clock: Callable[[], int] = time.perf_counter_ns,
+        guard: RunGuard | None = None,
     ) -> None:
         self._transport = transport
         self._base_url = base_url.rstrip("/")
@@ -59,8 +80,15 @@ class ScenarioRunner:
         self._now = now
         self._clock = clock
         self._origin_ns: int | None = None  # çalıştırmanın ortak monotonik başlangıç referansı
-        self._last_ns: int | None = None  # son run() çağrısının bittiği an
+        self._last_ns: int | None = None  # son run() çağrısının bittiği (ya da kesildiği) an
         self._seq = 0
+        self._guard = guard
+        self._results: list[RawResult] = []
+
+    @property
+    def results(self) -> list[RawResult]:
+        """Bu çalıştırmada şimdiye kadar tamamlanan tüm kayıtlar (kopya)."""
+        return list(self._results)
 
     @property
     def monotonic_duration_ms(self) -> float | None:
@@ -79,11 +107,19 @@ class ScenarioRunner:
         plan = [(True, i) for i in range(1, scenario.warmup_repetitions + 1)]
         plan += [(False, i) for i in range(1, scenario.repetitions + 1)]
         results: list[RawResult] = []
-        for position, (warmup, iteration) in enumerate(plan, start=1):
-            results.append(self._run_once(scenario, url, record_url, secrets, warmup, iteration))
-            if scenario.delay_seconds and position < len(plan):
-                self._sleep(scenario.delay_seconds)
-        self._last_ns = self._clock()
+        try:
+            for position, (warmup, iteration) in enumerate(plan, start=1):
+                if self._guard is not None:
+                    self._guard.before_request()
+                result = self._run_once(scenario, url, record_url, secrets, warmup, iteration)
+                results.append(result)
+                self._results.append(result)
+                if self._guard is not None:
+                    self._guard.after_result(result)
+                if scenario.delay_seconds and position < len(plan):
+                    self._sleep(scenario.delay_seconds)
+        finally:
+            self._last_ns = self._clock()  # kesintide de süre gerçek bitişi yansıtır
         return results
 
     def _run_once(

@@ -7,17 +7,63 @@ dizine göre çözülür, çalışma dizinine göre değil.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ._validate import read_json_file, reject_unknown_keys, require_number, require_str
+from ._validate import read_json_file, reject_unknown_keys, require_int, require_number, require_str
 
-ALLOWED_KEYS = frozenset({"base_url", "timeout_seconds", "output_dir", "scenarios_file"})
+ALLOWED_KEYS = frozenset({"base_url", "timeout_seconds", "output_dir", "scenarios_file", "limits"})
+
+# Yapılandırmayla aşılamayan sabit tavanlar (bkz. README "İstek bütçesi ve durdurma").
+HARD_MAX_REQUESTS = 10_000
+HARD_MAX_DURATION_SECONDS = 3_600.0
 
 
 class ConfigError(ValueError):
     """Geçersiz veya eksik yapılandırma."""
+
+
+@dataclass(frozen=True)
+class RunLimits:
+    """Bir çalıştırmanın güvenlik sınırları.
+
+    * max_requests: ısınma dahil toplam planlanan istek; aşılırsa hiçbir istek gönderilmez.
+    * max_duration_seconds: çalıştırma süresi; dolunca yeni istek başlatılmaz.
+    * max_consecutive_transport_errors: art arda bu kadar taşıma hatası (timeout/bağlantı) olursa durulur.
+    * max_error_rate / error_rate_min_requests: en az bu kadar istekten sonra başarısız oran
+      (taşıma hatası veya beklenmeyen HTTP durumu) eşiği aşarsa durulur.
+    """
+
+    max_requests: int = 1_000
+    max_duration_seconds: float = 600.0
+    max_consecutive_transport_errors: int = 5
+    max_error_rate: float = 0.5
+    error_rate_min_requests: int = 20
+
+    def __post_init__(self) -> None:
+        err = ConfigError
+        require_int(self.max_requests, "limits.max_requests", err, minimum=1)
+        if self.max_requests > HARD_MAX_REQUESTS:
+            raise err(f"limits.max_requests en fazla {HARD_MAX_REQUESTS} olabilir")
+        require_number(self.max_duration_seconds, "limits.max_duration_seconds", err, positive=True)
+        if self.max_duration_seconds > HARD_MAX_DURATION_SECONDS:
+            raise err(f"limits.max_duration_seconds en fazla {HARD_MAX_DURATION_SECONDS:g} olabilir")
+        require_int(self.max_consecutive_transport_errors, "limits.max_consecutive_transport_errors", err, minimum=1)
+        rate = require_number(self.max_error_rate, "limits.max_error_rate", err, positive=True)
+        if rate > 1:
+            raise err("limits.max_error_rate 0 ile 1 arasında olmalı (0 hariç)")
+        require_int(self.error_rate_min_requests, "limits.error_rate_min_requests", err, minimum=1)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _parse_limits(raw: object) -> RunLimits:
+    if not isinstance(raw, dict):
+        raise ConfigError("limits bir nesne olmalı")
+    reject_unknown_keys(raw, RunLimits.__dataclass_fields__.keys(), ConfigError, "limits")
+    return RunLimits(**raw)
 
 
 def _validate_base_url(base_url: object) -> None:
@@ -41,6 +87,7 @@ class LabConfig:
     timeout_seconds: float = 10.0
     output_dir: Path = Path("results")
     scenarios_file: Path = Path("scenarios.json")
+    limits: RunLimits = field(default_factory=RunLimits)
 
     def __post_init__(self) -> None:
         _validate_base_url(self.base_url)
@@ -48,6 +95,8 @@ class LabConfig:
         for name in ("output_dir", "scenarios_file"):
             if not isinstance(getattr(self, name), Path):
                 raise ConfigError(f"{name} bir Path olmalı")
+        if not isinstance(self.limits, RunLimits):
+            raise ConfigError("limits bir RunLimits olmalı")
 
     def to_dict(self) -> dict:
         return {
@@ -71,6 +120,8 @@ def load_config(path: str | Path) -> LabConfig:
     kwargs: dict = {"base_url": raw["base_url"]}
     if "timeout_seconds" in raw:
         kwargs["timeout_seconds"] = raw["timeout_seconds"]
+    if "limits" in raw:
+        kwargs["limits"] = _parse_limits(raw["limits"])
     for key, default in (("output_dir", "results"), ("scenarios_file", "scenarios.json")):
         value = require_str(raw.get(key, default), key, ConfigError)
         kwargs[key] = (base_dir / value).resolve()  # mutlak yol verilirse olduğu gibi kalır

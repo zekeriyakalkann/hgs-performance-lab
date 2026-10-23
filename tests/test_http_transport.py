@@ -18,7 +18,7 @@ from hgs2_lab.transport import (
     TransportTimeout,
 )
 
-URL = "http://h/p"
+URL = "http://127.0.0.1/p"  # loopback: hedef koruması yalnızca buna izin verir (sahte oturumla bağlantı yok)
 
 
 class FakeClock:
@@ -318,7 +318,7 @@ def test_injected_session_is_not_closed_by_transport():
 # Runner entegrasyonu: RawResult uyumu
 def make_runner(transport, clock):
     return ScenarioRunner(
-        transport, base_url="http://h", run_id="r1", timeout_seconds=5.0,
+        transport, base_url="http://127.0.0.1", run_id="r1", timeout_seconds=5.0,
         sleep=lambda s: None, now=lambda: "2026-01-01T00:00:00+00:00", clock=clock,
     )
 
@@ -386,9 +386,9 @@ FAKE = "FAKE-SECRET-123"
     ],
 )
 def test_error_messages_do_not_leak_query_or_header_secrets(exc_type, translated):
-    url = f"http://h/p?page=2&access_token={FAKE}Q"
+    url = f"http://127.0.0.1/p?page=2&access_token={FAKE}Q"
     message = (
-        f"HTTPConnectionPool(host='h', port=80): Max retries exceeded with url: /p?page=2&access_token={FAKE}Q "
+        f"HTTPConnectionPool(host='127.0.0.1', port=80): Max retries exceeded with url: /p?page=2&access_token={FAKE}Q "
         f"(header Bearer {FAKE}H, proxy http://u:{FAKE}P@proxy)"
     )
     transport, _, _ = make(exc_type(message))

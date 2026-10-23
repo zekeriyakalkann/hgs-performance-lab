@@ -39,6 +39,7 @@ __all__ = [
     "input_hashes",
     "redact",
     "scenario_snapshot",
+    "validate_target_label",
 ]
 
 GIT_TIMEOUT_SECONDS = 5.0
@@ -162,6 +163,12 @@ def input_hashes(config_path: Path | None, scenarios_path: Path | None) -> dict[
     return result
 
 
+def validate_target_label(target_label: object) -> str | None:
+    if target_label is not None and (not isinstance(target_label, str) or not target_label.strip()):
+        raise ValueError("target_label boş olmayan bir metin olmalı")
+    return target_label
+
+
 def build_run_metadata(
     config: LabConfig,
     scenarios: Sequence[Scenario],
@@ -172,8 +179,14 @@ def build_run_metadata(
     monotonic_duration_ms: float | None,
     target_label: str | None = None,
     code: dict[str, Any] | None = None,
+    inputs: dict[str, Any] | None = None,
+    execution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Bir çalıştırmanın metadata'sı. `code` verilmezse Git'ten okunur (testler için enjekte edilebilir)."""
+    """Bir çalıştırmanın metadata'sı.
+
+    `code` ve `inputs` verilmezse burada hesaplanır; çalıştırma akışı bunları istekler başlamadan
+    önce hesaplayıp verir. `execution`, çalıştırmanın durumunu (tamamlandı/durduruldu/kesildi) taşır.
+    """
     if monotonic_duration_ms is not None and (
         isinstance(monotonic_duration_ms, bool)
         or not isinstance(monotonic_duration_ms, (int, float))
@@ -181,8 +194,7 @@ def build_run_metadata(
         or monotonic_duration_ms < 0
     ):
         raise ValueError(f"monotonic_duration_ms sonlu ve negatif olmayan bir sayı olmalı: {monotonic_duration_ms!r}")
-    if target_label is not None and (not isinstance(target_label, str) or not target_label.strip()):
-        raise ValueError("target_label boş olmayan bir metin olmalı")
+    validate_target_label(target_label)
 
     return {
         "tool_version": __version__,
@@ -190,10 +202,11 @@ def build_run_metadata(
         "started_at": started_at,
         "finished_at": finished_at,
         "monotonic_duration_ms": monotonic_duration_ms,
+        "execution": execution,
         "code": code if code is not None else code_info(),
         "dependencies": dependency_versions(),
         "environment": environment_info(),
-        "inputs": input_hashes(config_path, config.scenarios_file),
+        "inputs": inputs if inputs is not None else input_hashes(config_path, config.scenarios_file),
         "config": config_snapshot(config),
         "scenarios": [scenario_snapshot(s) for s in scenarios],
     }

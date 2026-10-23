@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import gzip
 import json
+import socket
 import socketserver
 import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 LOOPBACK = "127.0.0.1"
 STALL_MAX_SECONDS = 15.0
@@ -33,6 +35,41 @@ SLOW_BODY_PARTS = (b"a" * 100, b"b" * 100)
 STALL_BODY_PARTS = (b"12345", b"67890")
 GZIP_PLAIN = b"hgs2-performance-lab " * 500
 GZIP_COMPRESSED = gzip.compress(GZIP_PLAIN, mtime=0)
+
+
+class ExternalNetworkBlocked(AssertionError):
+    """Test, 127.0.0.1 dışındaki bir adrese bağlanmaya çalıştı."""
+
+
+def install_network_guard(monkeypatch) -> tuple[list, list]:
+    """`socket.socket.connect`/`connect_ex`'i sarar: hedef 127.0.0.1 değilse bağlantı KURULMADAN
+    ExternalNetworkBlocked fırlatır ve adresi kaydeder. Sunucu tarafı (bind/listen/accept) etkilenmez.
+
+    (girişimler, reddedilen soketler) döndürür. Çağıran kod (ör. urllib3 create_connection) soketi
+    yalnızca OSError'da kapattığı için reddedilen soketler test bitince çağıran fixture'ca kapatılmalı.
+    """
+    attempts: list = []
+    blocked_sockets: list = []
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+
+    def check(sock, address):
+        if not (isinstance(address, tuple) and address and address[0] == LOOPBACK):
+            attempts.append(address)
+            blocked_sockets.append(sock)
+            raise ExternalNetworkBlocked(f"127.0.0.1 dışına bağlantı engellendi: {address!r}")
+
+    def guarded_connect(self, address):
+        check(self, address)
+        return real_connect(self, address)
+
+    def guarded_connect_ex(self, address):
+        check(self, address)
+        return real_connect_ex(self, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+    return attempts, blocked_sockets
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -55,7 +92,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self) -> None:
         self.server.record_request(self.command, self.path)
-        route = _ROUTES.get((self.command, self.path))
+        route = _ROUTES.get((self.command, urlsplit(self.path).path))  # sorgu dizgisi rota seçimini etkilemez
         try:
             if route is None:
                 self._send(404, b"not found")

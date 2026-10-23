@@ -79,9 +79,10 @@ def test_scenario_snapshot_hides_secrets_but_keeps_other_fields():
 def test_run_metadata_contents_and_no_secrets(tmp_path):
     meta = build(tmp_path, target_label="yerel-test")
     assert set(meta) == {
-        "tool_version", "target_label", "started_at", "finished_at", "monotonic_duration_ms",
+        "tool_version", "target_label", "started_at", "finished_at", "monotonic_duration_ms", "execution",
         "code", "dependencies", "environment", "inputs", "config", "scenarios",
     }
+    assert meta["execution"] is None  # doğrudan çağrıda durum verilmedi; çalıştırma akışı doldurur
     assert meta["tool_version"] == __version__
     assert meta["target_label"] == "yerel-test"
     assert meta["monotonic_duration_ms"] == 1234.5
