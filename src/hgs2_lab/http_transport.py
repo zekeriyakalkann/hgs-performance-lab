@@ -125,6 +125,17 @@ class _LoopbackOnlyAdapter(HTTPAdapter):
     def proxy_manager_for(self, proxy: str, **proxy_kwargs: Any) -> Any:
         raise TargetNotAllowed("Proxy üzerinden bağlantıya izin verilmiyor")
 
+    def close(self) -> None:
+        # urllib3 2.x PoolManager.clear() havuzları kapatmadan bırakır (dispose_func yok): boştaki keep-alive
+        # soketleri ancak nesneler serbest kalınca kapanır; zaman aşımı istisnalarının referans döngülerinde bu,
+        # çöp toplamaya kalır ve sunucu tarafında bağlantı açık görünür. Havuzlar burada açıkça kapatılır.
+        pools = self.poolmanager.pools
+        for key in list(pools.keys()):
+            pool = pools.get(key)
+            if pool is not None:
+                pool.close()
+        super().close()
+
 
 class RequestsTransport:
     """`Transport` protokolünün requests uygulaması.

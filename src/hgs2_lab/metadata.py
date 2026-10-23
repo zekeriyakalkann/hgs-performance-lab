@@ -24,7 +24,9 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .clock import ClockAnchor
 from .config import LabConfig
+from .models import DATASET_KINDS, DATASET_MEASUREMENT, DATASET_SYNTHETIC
 from .sanitize import REDACTED, SENSITIVE_KEY_RE, sanitize_url
 from .scenarios import Scenario
 
@@ -39,6 +41,7 @@ __all__ = [
     "input_hashes",
     "redact",
     "scenario_snapshot",
+    "validate_dataset_kind",
     "validate_target_label",
 ]
 
@@ -169,6 +172,15 @@ def validate_target_label(target_label: object) -> str | None:
     return target_label
 
 
+def validate_dataset_kind(dataset_kind: object, synthetic: object) -> None:
+    if dataset_kind not in DATASET_KINDS:
+        raise ValueError(f"dataset_kind bilinmiyor: {dataset_kind!r}")
+    if (dataset_kind == DATASET_SYNTHETIC) != (synthetic is not None):
+        raise ValueError("synthetic bilgisi yalnızca ve her zaman dataset_kind='synthetic' ile verilir")
+    if synthetic is not None and not isinstance(synthetic, dict):
+        raise ValueError("synthetic bir sözlük olmalı")
+
+
 def build_run_metadata(
     config: LabConfig,
     scenarios: Sequence[Scenario],
@@ -181,12 +193,21 @@ def build_run_metadata(
     code: dict[str, Any] | None = None,
     inputs: dict[str, Any] | None = None,
     execution: dict[str, Any] | None = None,
+    clock: ClockAnchor | None = None,
+    dataset_kind: str = DATASET_MEASUREMENT,
+    synthetic: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Bir çalıştırmanın metadata'sı.
 
     `code` ve `inputs` verilmezse burada hesaplanır; çalıştırma akışı bunları istekler başlamadan
     önce hesaplayıp verir. `execution`, çalıştırmanın durumunu (tamamlandı/durduruldu/kesildi) taşır.
+    `clock`, runner'ın saat çapasıdır (bkz. clock.py); hiç istek başlamadıysa None yazılır.
+    `dataset_kind` ölçüm ile sentetik deneyi ayırır; `synthetic` yalnızca sentetik deneyde dolu olur ve
+    planlanan hataları DEĞİL, yalnızca deneyin kimliğini ve özetlerini taşır (bkz. synthetic.py).
     """
+    if clock is not None and not isinstance(clock, ClockAnchor):
+        raise ValueError(f"clock bir ClockAnchor olmalı (alınan: {type(clock).__name__})")
+    validate_dataset_kind(dataset_kind, synthetic)
     if monotonic_duration_ms is not None and (
         isinstance(monotonic_duration_ms, bool)
         or not isinstance(monotonic_duration_ms, (int, float))
@@ -196,12 +217,14 @@ def build_run_metadata(
         raise ValueError(f"monotonic_duration_ms sonlu ve negatif olmayan bir sayı olmalı: {monotonic_duration_ms!r}")
     validate_target_label(target_label)
 
-    return {
+    document = {
         "tool_version": __version__,
+        "dataset_kind": dataset_kind,
         "target_label": target_label,
         "started_at": started_at,
         "finished_at": finished_at,
         "monotonic_duration_ms": monotonic_duration_ms,
+        "clock": clock.to_dict() if clock is not None else None,
         "execution": execution,
         "code": code if code is not None else code_info(),
         "dependencies": dependency_versions(),
@@ -210,3 +233,6 @@ def build_run_metadata(
         "config": config_snapshot(config),
         "scenarios": [scenario_snapshot(s) for s in scenarios],
     }
+    if synthetic is not None:
+        document["synthetic"] = synthetic
+    return document

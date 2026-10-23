@@ -1,0 +1,24 @@
+{
+  "manifest_version": 1,
+  "experiment_id": "syn-fault-mix-001",
+  "experiment_type": "fault_injection",
+  "dataset_kind": "synthetic",
+  "description": "Örnek sentetik deney: normal, sabit/rastgele gecikme, belirli istekten sonra HTTP 503, bağlantı kesme, zaman aşımı. Gerçek HGS2 ölçümü değildir.",
+  "seed": 20261024,
+  "timeout_seconds": 0.5,
+  "limits": {
+    "max_requests": 200,
+    "max_duration_seconds": 120,
+    "max_consecutive_transport_errors": 10,
+    "max_error_rate": 0.5,
+    "error_rate_min_requests": 20
+  },
+  "scenarios": [
+    {"name": "baseline", "warmup_repetitions": 2, "repetitions": 20, "fault": {"type": "none"}},
+    {"name": "latency-fixed", "repetitions": 10, "fault": {"type": "fixed_delay", "delay_ms": 50}},
+    {"name": "latency-random", "repetitions": 10, "fault": {"type": "random_delay", "min_delay_ms": 10, "max_delay_ms": 80}},
+    {"name": "http-503-after-3", "repetitions": 8, "fault": {"type": "http_error", "status": 503, "onset_after": 3}},
+    {"name": "connection-drop", "repetitions": 3, "fault": {"type": "connection_drop"}},
+    {"name": "client-timeout", "repetitions": 2, "fault": {"type": "timeout"}}
+  ]
+}

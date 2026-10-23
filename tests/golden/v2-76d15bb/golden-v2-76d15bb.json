@@ -1,0 +1,223 @@
+{
+  "schema_version": 2,
+  "run_id": "golden-v2-76d15bb",
+  "tool_version": "0.1.0",
+  "target_label": "golden-fixture",
+  "started_at": "2026-10-23T10:00:01.000000+00:00",
+  "finished_at": "2026-10-23T10:00:10.000000+00:00",
+  "monotonic_duration_ms": 2058.5,
+  "code": {
+    "git_commit": "76d15bb9a120a5cd414dc5b5eacc139de762927a",
+    "git_dirty": false
+  },
+  "dependencies": {
+    "requests": "2.34.2",
+    "urllib3": "2.8.0"
+  },
+  "environment": {
+    "python_version": "3.15.0",
+    "python_implementation": "CPython",
+    "platform": "golden-fixture",
+    "machine": "golden-fixture",
+    "processor": "golden-fixture",
+    "cpu_count": 8
+  },
+  "inputs": {
+    "config_file": "config.json",
+    "config_sha256": "f5f846625ade4dada26f92aeea0f3202c2ec171c654341270ab73624e8c4f71c",
+    "scenarios_file": "scenarios.json",
+    "scenarios_sha256": "d3b10da4e796dbe69facc2b40a553fabdb82d04eb836abbc955e2fcb4ca89c14",
+    "hash_errors": {}
+  },
+  "config": {
+    "base_url": "http://127.0.0.1:8080",
+    "timeout_seconds": 2.0,
+    "output_dir": "76d15bb",
+    "scenarios_file": "scenarios.json"
+  },
+  "scenarios": [
+    {
+      "name": "login",
+      "method": "POST",
+      "path": "/api/login?lang=tr&token=***REDACTED***",
+      "repetitions": 3,
+      "delay_seconds": 0.0,
+      "headers": {
+        "Authorization": "***REDACTED***"
+      },
+      "body": {
+        "username": "demo",
+        "password": "***REDACTED***"
+      },
+      "expected_status": [
+        200
+      ],
+      "warmup_repetitions": 1
+    },
+    {
+      "name": "items",
+      "method": "GET",
+      "path": "/api/items",
+      "repetitions": 4,
+      "delay_seconds": 0.0,
+      "headers": {},
+      "body": null,
+      "expected_status": [],
+      "warmup_repetitions": 0
+    }
+  ],
+  "results": [
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 1,
+      "scenario": "login",
+      "iteration": 1,
+      "warmup": true,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***",
+      "started_at": "2026-10-23T10:00:02.000000+00:00",
+      "offset_ms": 0.0,
+      "elapsed_ms": 12.5,
+      "duration_ms": 12.0,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 64
+    },
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 2,
+      "scenario": "login",
+      "iteration": 1,
+      "warmup": false,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***",
+      "started_at": "2026-10-23T10:00:03.000000+00:00",
+      "offset_ms": 12.5,
+      "elapsed_ms": 10.25,
+      "duration_ms": 10.0,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 64
+    },
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 3,
+      "scenario": "login",
+      "iteration": 2,
+      "warmup": false,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***",
+      "started_at": "2026-10-23T10:00:04.000000+00:00",
+      "offset_ms": 22.75,
+      "elapsed_ms": 11.75,
+      "duration_ms": 11.5,
+      "status_code": 500,
+      "http_ok": false,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 16
+    },
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 4,
+      "scenario": "login",
+      "iteration": 3,
+      "warmup": false,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***",
+      "started_at": "2026-10-23T10:00:05.000000+00:00",
+      "offset_ms": 34.5,
+      "elapsed_ms": 2000.0,
+      "duration_ms": null,
+      "status_code": null,
+      "http_ok": null,
+      "business_outcome": null,
+      "error_type": "timeout",
+      "error": "TransportTimeout: ReadTimeout: token=***REDACTED***",
+      "response_bytes": null
+    },
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 5,
+      "scenario": "items",
+      "iteration": 1,
+      "warmup": false,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:06.000000+00:00",
+      "offset_ms": 2034.5,
+      "elapsed_ms": 5.5,
+      "duration_ms": 5.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    },
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 6,
+      "scenario": "items",
+      "iteration": 2,
+      "warmup": false,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:07.000000+00:00",
+      "offset_ms": 2040.0,
+      "elapsed_ms": 6.5,
+      "duration_ms": 6.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    },
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 7,
+      "scenario": "items",
+      "iteration": 3,
+      "warmup": false,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:08.000000+00:00",
+      "offset_ms": 2046.5,
+      "elapsed_ms": 4.5,
+      "duration_ms": 4.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    },
+    {
+      "run_id": "golden-v2-76d15bb",
+      "seq": 8,
+      "scenario": "items",
+      "iteration": 4,
+      "warmup": false,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:09.000000+00:00",
+      "offset_ms": 2051.0,
+      "elapsed_ms": 7.5,
+      "duration_ms": 7.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    }
+  ]
+}

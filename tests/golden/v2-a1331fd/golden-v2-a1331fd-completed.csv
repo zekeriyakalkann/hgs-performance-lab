@@ -1,0 +1,9 @@
+run_id,seq,scenario,iteration,warmup,method,url,started_at,offset_ms,elapsed_ms,duration_ms,status_code,http_ok,business_outcome,error_type,error,response_bytes
+golden-v2-a1331fd-completed,1,login,1,true,POST,http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***,2026-10-23T10:00:02.000000+00:00,0.0,12.5,12.0,200,true,,,,64
+golden-v2-a1331fd-completed,2,login,1,false,POST,http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***,2026-10-23T10:00:03.000000+00:00,12.5,10.25,10.0,200,true,,,,64
+golden-v2-a1331fd-completed,3,login,2,false,POST,http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***,2026-10-23T10:00:04.000000+00:00,22.75,11.75,11.5,500,false,,,,16
+golden-v2-a1331fd-completed,4,login,3,false,POST,http://127.0.0.1:8080/api/login?lang=tr&token=***REDACTED***,2026-10-23T10:00:05.000000+00:00,34.5,2000.0,,,,,timeout,TransportTimeout: ReadTimeout: token=***REDACTED***,
+golden-v2-a1331fd-completed,5,items,1,false,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:06.000000+00:00,2034.5,5.5,5.25,200,true,,,,128
+golden-v2-a1331fd-completed,6,items,2,false,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:07.000000+00:00,2040.0,6.5,6.25,200,true,,,,128
+golden-v2-a1331fd-completed,7,items,3,false,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:08.000000+00:00,2046.5,4.5,4.25,200,true,,,,128
+golden-v2-a1331fd-completed,8,items,4,false,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:09.000000+00:00,2051.0,7.5,7.25,200,true,,,,128

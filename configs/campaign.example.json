@@ -1,0 +1,278 @@
+{
+  "campaign_version": 1,
+  "campaign_id": "camp-mix-001",
+  "dataset_kind": "synthetic",
+  "description": "Örnek sentetik kampanya: 5 karma temel plan x 2 seed. Gerçek HGS2 ölçümü değildir.",
+  "seeds": [
+    11,
+    12
+  ],
+  "timeout_seconds": 0.3,
+  "plans": [
+    {
+      "plan_id": "mix-a",
+      "scenarios": [
+        {
+          "name": "baseline",
+          "warmup_repetitions": 1,
+          "repetitions": 6,
+          "fault": {
+            "type": "none"
+          }
+        },
+        {
+          "name": "latency-fixed",
+          "repetitions": 4,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 10
+          }
+        },
+        {
+          "name": "latency-random",
+          "repetitions": 4,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 5,
+            "max_delay_ms": 25
+          }
+        },
+        {
+          "name": "http-error",
+          "repetitions": 4,
+          "fault": {
+            "type": "http_error",
+            "status": 500,
+            "onset_after": 1
+          }
+        },
+        {
+          "name": "connection-drop",
+          "repetitions": 2,
+          "fault": {
+            "type": "connection_drop"
+          }
+        },
+        {
+          "name": "client-timeout",
+          "repetitions": 1,
+          "fault": {
+            "type": "timeout"
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "mix-b",
+      "scenarios": [
+        {
+          "name": "baseline",
+          "warmup_repetitions": 1,
+          "repetitions": 6,
+          "fault": {
+            "type": "none"
+          }
+        },
+        {
+          "name": "latency-fixed",
+          "repetitions": 4,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 20
+          }
+        },
+        {
+          "name": "latency-random",
+          "repetitions": 4,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 10,
+            "max_delay_ms": 40
+          }
+        },
+        {
+          "name": "http-error",
+          "repetitions": 4,
+          "fault": {
+            "type": "http_error",
+            "status": 502,
+            "onset_after": 2
+          }
+        },
+        {
+          "name": "connection-drop",
+          "repetitions": 2,
+          "fault": {
+            "type": "connection_drop"
+          }
+        },
+        {
+          "name": "client-timeout",
+          "repetitions": 1,
+          "fault": {
+            "type": "timeout"
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "mix-c",
+      "scenarios": [
+        {
+          "name": "baseline",
+          "warmup_repetitions": 1,
+          "repetitions": 6,
+          "fault": {
+            "type": "none"
+          }
+        },
+        {
+          "name": "latency-fixed",
+          "repetitions": 4,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 30
+          }
+        },
+        {
+          "name": "latency-random",
+          "repetitions": 4,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 5,
+            "max_delay_ms": 60
+          }
+        },
+        {
+          "name": "http-error",
+          "repetitions": 4,
+          "fault": {
+            "type": "http_error",
+            "status": 503,
+            "onset_after": 1
+          }
+        },
+        {
+          "name": "connection-drop",
+          "repetitions": 2,
+          "fault": {
+            "type": "connection_drop"
+          }
+        },
+        {
+          "name": "client-timeout",
+          "repetitions": 1,
+          "fault": {
+            "type": "timeout"
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "mix-d",
+      "scenarios": [
+        {
+          "name": "baseline",
+          "warmup_repetitions": 1,
+          "repetitions": 6,
+          "fault": {
+            "type": "none"
+          }
+        },
+        {
+          "name": "latency-fixed",
+          "repetitions": 4,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 40
+          }
+        },
+        {
+          "name": "latency-random",
+          "repetitions": 4,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 20,
+            "max_delay_ms": 80
+          }
+        },
+        {
+          "name": "http-error",
+          "repetitions": 4,
+          "fault": {
+            "type": "http_error",
+            "status": 504,
+            "onset_after": 2
+          }
+        },
+        {
+          "name": "connection-drop",
+          "repetitions": 2,
+          "fault": {
+            "type": "connection_drop"
+          }
+        },
+        {
+          "name": "client-timeout",
+          "repetitions": 1,
+          "fault": {
+            "type": "timeout"
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "mix-e",
+      "scenarios": [
+        {
+          "name": "baseline",
+          "warmup_repetitions": 1,
+          "repetitions": 6,
+          "fault": {
+            "type": "none"
+          }
+        },
+        {
+          "name": "latency-fixed",
+          "repetitions": 4,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 60
+          }
+        },
+        {
+          "name": "latency-random",
+          "repetitions": 4,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 10,
+            "max_delay_ms": 100
+          }
+        },
+        {
+          "name": "http-error",
+          "repetitions": 4,
+          "fault": {
+            "type": "http_error",
+            "status": 500,
+            "onset_after": 3
+          }
+        },
+        {
+          "name": "connection-drop",
+          "repetitions": 2,
+          "fault": {
+            "type": "connection_drop"
+          }
+        },
+        {
+          "name": "client-timeout",
+          "repetitions": 1,
+          "fault": {
+            "type": "timeout"
+          }
+        }
+      ]
+    }
+  ]
+}

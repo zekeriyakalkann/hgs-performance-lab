@@ -1,4 +1,5 @@
 # Bağımlılık tanımlarının kaynağı pyproject.toml'dur; kesin sürümler constraints.txt'dedir.
-# "analysis" eki (pandas, numpy, matplotlib) henüz kurulum kapsamında değildir.
+# "analysis" eki (pandas, numpy, matplotlib) kurulum kapsamında değildir; `analyze` komutu yalnızca
+# standart kütüphaneyi kullanır ve bu eke ihtiyaç duymaz.
 -c constraints.txt
 -e .[dev]

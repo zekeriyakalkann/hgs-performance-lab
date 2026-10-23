@@ -1,0 +1,124 @@
+{
+  "schema_version": 2,
+  "run_id": "golden-v2-a1331fd-aborted",
+  "tool_version": "0.1.0",
+  "target_label": "golden-fixture",
+  "started_at": "2026-10-23T10:00:01.000000+00:00",
+  "finished_at": "2026-10-23T10:00:05.000000+00:00",
+  "monotonic_duration_ms": 4003.0,
+  "execution": {
+    "status": "aborted",
+    "stop_reason": "consecutive_transport_errors",
+    "message": "Art arda 2 taşıma hatası (son: timeout)",
+    "planned_requests": 5,
+    "completed_requests": 3,
+    "limits": {
+      "max_requests": 1000,
+      "max_duration_seconds": 600.0,
+      "max_consecutive_transport_errors": 2,
+      "max_error_rate": 0.5,
+      "error_rate_min_requests": 20
+    }
+  },
+  "code": {
+    "git_commit": "a1331fdc841f95a7b681068fb152826bc2c34de2",
+    "git_dirty": false
+  },
+  "dependencies": {
+    "requests": "2.34.2",
+    "urllib3": "2.8.0"
+  },
+  "environment": {
+    "python_version": "3.15.0",
+    "python_implementation": "CPython",
+    "platform": "golden-fixture",
+    "machine": "golden-fixture",
+    "processor": "golden-fixture",
+    "cpu_count": 8
+  },
+  "inputs": {
+    "config_file": "config.json",
+    "config_sha256": "f5f846625ade4dada26f92aeea0f3202c2ec171c654341270ab73624e8c4f71c",
+    "scenarios_file": "scenarios.json",
+    "scenarios_sha256": "d3b10da4e796dbe69facc2b40a553fabdb82d04eb836abbc955e2fcb4ca89c14",
+    "hash_errors": {}
+  },
+  "config": {
+    "base_url": "http://127.0.0.1:8080",
+    "timeout_seconds": 2.0,
+    "output_dir": "a1331fd",
+    "scenarios_file": "scenarios.json"
+  },
+  "scenarios": [
+    {
+      "name": "items",
+      "method": "GET",
+      "path": "/api/items",
+      "repetitions": 5,
+      "delay_seconds": 0.0,
+      "headers": {},
+      "body": null,
+      "expected_status": [],
+      "warmup_repetitions": 0
+    }
+  ],
+  "results": [
+    {
+      "run_id": "golden-v2-a1331fd-aborted",
+      "seq": 1,
+      "scenario": "items",
+      "iteration": 1,
+      "warmup": false,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:02.000000+00:00",
+      "offset_ms": 0.0,
+      "elapsed_ms": 3.0,
+      "duration_ms": 2.75,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 8
+    },
+    {
+      "run_id": "golden-v2-a1331fd-aborted",
+      "seq": 2,
+      "scenario": "items",
+      "iteration": 2,
+      "warmup": false,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:03.000000+00:00",
+      "offset_ms": 3.0,
+      "elapsed_ms": 2000.0,
+      "duration_ms": null,
+      "status_code": null,
+      "http_ok": null,
+      "business_outcome": null,
+      "error_type": "timeout",
+      "error": "TransportTimeout: t1",
+      "response_bytes": null
+    },
+    {
+      "run_id": "golden-v2-a1331fd-aborted",
+      "seq": 3,
+      "scenario": "items",
+      "iteration": 3,
+      "warmup": false,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:04.000000+00:00",
+      "offset_ms": 2003.0,
+      "elapsed_ms": 2000.0,
+      "duration_ms": null,
+      "status_code": null,
+      "http_ok": null,
+      "business_outcome": null,
+      "error_type": "timeout",
+      "error": "TransportTimeout: t2",
+      "response_bytes": null
+    }
+  ]
+}

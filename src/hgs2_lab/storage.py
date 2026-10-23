@@ -8,8 +8,17 @@
 * CSV ve JSON aynı `RawResult` alanlarını aynı sırayla taşır. CSV'de None boş
   hücre, bool ise `true`/`false` olarak yazılır; `load_csv` tipleri geri kazanır.
 * Şema sürümünün yetkili kaynağı JSON'daki üst düzey `schema_version`'dır; CSV'de
-  sürüm sütunu yoktur. Yalnızca SCHEMA_VERSION okunur; eski sürümler açık bir
-  hatayla reddedilir (dönüştürme yoktur).
+  sürüm sütunu yoktur, CSV sürümü başlık imzasından anlaşılır.
+
+Sürüm politikası (bkz. README "Şema sürüm politikası"):
+* Yazılan sürüm `SCHEMA_VERSION`, okunabilen sürümler `READABLE_SCHEMA_VERSIONS`'dır.
+* `RawResult` alan kümesindeki her değişiklik (alan ekleme dahil) yeni bir ana sürümdür: CSV
+  başlığı ve `RawResult.from_dict` alan kümesinin birebir eşleşmesini ister.
+* Metadata'ya yeni üst düzey anahtar eklemek sürüm DEĞİŞTİRMEZ; okuyucular tanımadıkları
+  metadata anahtarlarını yok sayar (ör. `clock` bu yolla eklendi; eski v2 okuyucular etkilenmez).
+* Yeni bir ana sürüm eklendiğinde eski sürümler okunmaya devam eder: eski kayıtlar yeni modele
+  açık bir dönüştürücüyle yükseltilir ve sürüm READABLE_SCHEMA_VERSIONS'a eklenir.
+* Listede olmayan sürümler (şema 1 dahil) açık bir hatayla reddedilir; sürüm tam sayı olmalıdır.
 * Tamamlanmamış çalıştırmalar (`partial=True`) `<run_id>.partial.csv/json` adıyla yazılır;
   yarım sonuçlar dosya adından da ayırt edilir. Bir run_id için tam ya da kısmi dosyalardan
   herhangi biri varsa hiçbir dosya yazılmaz.
@@ -27,7 +36,8 @@ from typing import Any, NamedTuple
 
 from .models import RawResult, validate_run_id
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 2  # yazılan sürüm
+READABLE_SCHEMA_VERSIONS = frozenset({SCHEMA_VERSION})  # okunabilen sürümler; dönüştürücüsüz sürüm eklenmez
 _RESERVED_METADATA_KEYS = frozenset({"schema_version", "run_id", "results"})
 _PARTIAL_SUFFIX = ".partial"
 # Şema v1 CSV başlığı; yalnızca anlaşılır bir uyumsuzluk hatası vermek için tutulur.
@@ -178,53 +188,71 @@ class ResultStore:
     def load_json(self, run_id: str, partial: bool = False) -> StoredRun:
         _, json_path = self.paths(run_id, partial)
         try:
-            document = json.loads(json_path.read_text(encoding="utf-8"))
+            text = json_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             raise StorageError(f"JSON sonuç dosyası okunamadı ({json_path}): {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise StorageError(f"JSON sonuç dosyası geçerli değil ({json_path}): {exc}") from exc
-
-        if not isinstance(document, dict):
-            raise StorageError(f"JSON sonuç dosyası bir nesne değil: {json_path}")
-        version = document.get("schema_version")
-        if version != SCHEMA_VERSION:
-            raise UnsupportedSchemaError(
-                f"Desteklenmeyen veya eksik schema_version {version!r}: bu sürüm yalnızca şema "
-                f"{SCHEMA_VERSION} sonuçlarını okur, eski sürümler dönüştürülmez ({json_path})"
-            )
-        if document.get("run_id") != run_id:
-            raise StorageError(f"Dosyadaki run_id ({document.get('run_id')!r}) istenen run_id ile uyuşmuyor")
-        rows = document.get("results")
-        if not isinstance(rows, list):
-            raise StorageError(f"'results' listesi eksik: {json_path}")
-        try:
-            results = [RawResult.from_dict(row) for row in rows]
-        except (TypeError, ValueError) as exc:
-            raise StorageError(f"Geçersiz sonuç kaydı ({json_path}): {exc}") from exc
-        metadata = {k: v for k, v in document.items() if k != "results"}
-        return StoredRun(metadata=metadata, results=results)
+        return parse_json_document(text, run_id=run_id, source=json_path)
 
     def load_csv(self, run_id: str, partial: bool = False) -> list[RawResult]:
         csv_path, _ = self.paths(run_id, partial)
         try:
             with csv_path.open(encoding="utf-8", newline="") as f:
-                reader = csv.DictReader(f)
-                if reader.fieldnames == _V1_CSV_FIELDS:
-                    raise UnsupportedSchemaError(
-                        f"CSV başlığı şema 1'e ait; bu sürüm yalnızca şema {SCHEMA_VERSION} sonuçlarını okur, "
-                        f"eski sürümler dönüştürülmez ({csv_path})"
-                    )
-                if reader.fieldnames != RawResult.field_names():
-                    raise StorageError(f"CSV başlığı beklenen alanlarla uyuşmuyor: {csv_path}")
-                results = []
-                for row in reader:
-                    if None in row or None in row.values():
-                        raise StorageError(f"CSV satır {reader.line_num}: sütun sayısı hatalı ({csv_path})")
-                    try:
-                        values = {name: _CSV_PARSERS[name](text) for name, text in row.items()}
-                        results.append(RawResult.from_dict(values))
-                    except ValueError as exc:
-                        raise StorageError(f"CSV satır {reader.line_num} geçersiz ({csv_path}): {exc}") from exc
-                return results
+                text = f.read()
         except (OSError, UnicodeDecodeError) as exc:
             raise StorageError(f"CSV sonuç dosyası okunamadı ({csv_path}): {exc}") from exc
+        return parse_csv_text(text, source=csv_path)
+
+
+def _readable_versions_text() -> str:
+    return ", ".join(str(v) for v in sorted(READABLE_SCHEMA_VERSIONS))
+
+
+def parse_json_document(text: str, *, run_id: str, source: object) -> StoredRun:
+    """JSON sonuç belgesini metinden ayrıştırır ve doğrular; `source` yalnızca hata mesajları içindir."""
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise StorageError(f"JSON sonuç dosyası geçerli değil ({source}): {exc}") from exc
+
+    if not isinstance(document, dict):
+        raise StorageError(f"JSON sonuç dosyası bir nesne değil: {source}")
+    version = document.get("schema_version")
+    # bool bir int alt sınıfıdır, 2.0 ise 2'ye eşittir: ikisi de geçerli sürüm sayılmaz.
+    if type(version) is not int or version not in READABLE_SCHEMA_VERSIONS:
+        raise UnsupportedSchemaError(
+            f"Desteklenmeyen veya eksik schema_version {version!r}: bu sürüm yalnızca şema "
+            f"{_readable_versions_text()} sonuçlarını okur, eski sürümler dönüştürülmez ({source})"
+        )
+    if document.get("run_id") != run_id:
+        raise StorageError(f"Dosyadaki run_id ({document.get('run_id')!r}) istenen run_id ile uyuşmuyor")
+    rows = document.get("results")
+    if not isinstance(rows, list):
+        raise StorageError(f"'results' listesi eksik: {source}")
+    try:
+        results = [RawResult.from_dict(row) for row in rows]
+    except (TypeError, ValueError) as exc:
+        raise StorageError(f"Geçersiz sonuç kaydı ({source}): {exc}") from exc
+    metadata = {k: v for k, v in document.items() if k != "results"}
+    return StoredRun(metadata=metadata, results=results)
+
+
+def parse_csv_text(text: str, *, source: object) -> list[RawResult]:
+    """CSV sonuçlarını metinden ayrıştırır; başlık imzası şema sürümünü belirler."""
+    reader = csv.DictReader(io.StringIO(text, newline=""))
+    if reader.fieldnames == _V1_CSV_FIELDS:
+        raise UnsupportedSchemaError(
+            f"CSV başlığı şema 1'e ait; bu sürüm yalnızca şema {_readable_versions_text()} sonuçlarını okur, "
+            f"eski sürümler dönüştürülmez ({source})"
+        )
+    if reader.fieldnames != RawResult.field_names():
+        raise StorageError(f"CSV başlığı beklenen alanlarla uyuşmuyor: {source}")
+    results = []
+    for row in reader:
+        if None in row or None in row.values():
+            raise StorageError(f"CSV satır {reader.line_num}: sütun sayısı hatalı ({source})")
+        try:
+            values = {name: _CSV_PARSERS[name](cell) for name, cell in row.items()}
+            results.append(RawResult.from_dict(values))
+        except ValueError as exc:
+            raise StorageError(f"CSV satır {reader.line_num} geçersiz ({source}): {exc}") from exc
+    return results

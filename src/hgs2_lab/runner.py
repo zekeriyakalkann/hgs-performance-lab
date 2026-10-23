@@ -6,7 +6,8 @@ yapılır (bkz. transport.py; gerçek taşıyıcı http_transport.RequestsTransp
 Bir `ScenarioRunner` örneği bir çalıştırmayı temsil eder: `run()` birden çok
 senaryo için çağrılabilir; `seq` bu çağrılar boyunca kesintisiz artar ve
 `offset_ms` ilk `run()` çağrısında alınan ortak monotonik referansa göre
-hesaplanır. Her senaryoda önce `warmup_repetitions` ısınma isteği (warmup=True),
+hesaplanır. Bu referans, aynı anda okunan UTC duvar saatiyle birlikte `clock_anchor`
+olarak tutulur (bkz. clock.py). Her senaryoda önce `warmup_repetitions` ısınma isteği (warmup=True),
 sonra `repetitions` ölçüm isteği aynı yürütme yolundan geçer.
 
 Yalnızca `TransportError` ailesi ölçüm kaydına çevrilir. Diğer tüm
@@ -28,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Protocol
 
 from ._validate import require_number
+from .clock import ClockAnchor
 from .models import RawResult, validate_run_id
 from .sanitize import sanitize_text, sanitize_url, sensitive_values
 from .scenarios import Scenario
@@ -71,6 +73,7 @@ class ScenarioRunner:
         now: Callable[[], str] = _utc_now_iso,
         clock: Callable[[], int] = time.perf_counter_ns,
         guard: RunGuard | None = None,
+        wall_clock: Callable[[], int] = time.time_ns,
     ) -> None:
         self._transport = transport
         self._base_url = base_url.rstrip("/")
@@ -79,6 +82,8 @@ class ScenarioRunner:
         self._sleep = sleep
         self._now = now
         self._clock = clock
+        self._wall_clock = wall_clock
+        self._anchor: ClockAnchor | None = None
         self._origin_ns: int | None = None  # çalıştırmanın ortak monotonik başlangıç referansı
         self._last_ns: int | None = None  # son run() çağrısının bittiği (ya da kesildiği) an
         self._seq = 0
@@ -97,9 +102,15 @@ class ScenarioRunner:
             return None
         return (self._last_ns - self._origin_ns) / _NS_PER_MS
 
+    @property
+    def clock_anchor(self) -> ClockAnchor | None:
+        """Başlangıç referansı ile aynı anda okunan duvar saati; henüz çalışmadıysa None."""
+        return self._anchor
+
     def run(self, scenario: Scenario) -> list[RawResult]:
         if self._origin_ns is None:
-            self._origin_ns = self._clock()
+            self._anchor = ClockAnchor.capture(self._clock, self._wall_clock)
+            self._origin_ns = self._anchor.monotonic_ns
         url = self._base_url + scenario.path
         record_url = sanitize_url(url)
         secrets = sensitive_values(scenario.headers, url)

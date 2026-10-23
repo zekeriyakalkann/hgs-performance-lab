@@ -30,6 +30,20 @@ ERROR_CONNECTION = "connection_error"
 ERROR_TRANSPORT = "transport_error"  # sınıflandırılamayan diğer taşıma hataları
 ERROR_TYPES = frozenset({ERROR_TIMEOUT, ERROR_CONNECTION, ERROR_TRANSPORT})
 
+# Çalıştırma durumları (metadata `execution.status`; bkz. execution.py). Burada tanımlıdır ki
+# sonuç okuyucu ve analiz, ağ katmanını içe aktaran execution.py'ye bağımlı olmasın.
+STATUS_COMPLETED = "completed"
+STATUS_ABORTED = "aborted"
+STATUS_INTERRUPTED = "interrupted"
+STATUS_FAILED = "failed"
+EXECUTION_STATUSES = frozenset({STATUS_COMPLETED, STATUS_ABORTED, STATUS_INTERRUPTED, STATUS_FAILED})
+
+# Veri türü (metadata `dataset_kind`): yapılandırılmış hedefe karşı ölçüm ya da uygulamanın kendi yerel
+# sentetik sunucusuna karşı planlı hata deneyi. Bu alandan önce yazılmış dosyalarda yoktur (bilinmiyor).
+DATASET_MEASUREMENT = "measurement"
+DATASET_SYNTHETIC = "synthetic"
+DATASET_KINDS = frozenset({DATASET_MEASUREMENT, DATASET_SYNTHETIC})
+
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _WINDOWS_RESERVED = frozenset(
     {"CON", "PRN", "AUX", "NUL"}

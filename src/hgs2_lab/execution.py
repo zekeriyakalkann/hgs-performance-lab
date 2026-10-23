@@ -30,19 +30,22 @@ from typing import Any, Protocol
 
 from .config import LabConfig, RunLimits
 from .http_transport import RequestsTransport
-from .metadata import build_run_metadata, code_info, input_hashes, validate_target_label
-from .models import RawResult, validate_run_id
+from .metadata import build_run_metadata, code_info, input_hashes, validate_dataset_kind, validate_target_label
+from .models import (  # noqa: F401 - durum sabitleri buradan da dışa aktarılır
+    STATUS_ABORTED,
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_INTERRUPTED,
+    RawResult,
+    validate_run_id,
+)
+from .models import DATASET_MEASUREMENT
 from .runner import RunStopped, ScenarioRunner
 from .sanitize import sanitize_text
 from .scenarios import Scenario
 from .storage import ResultStore
 from .target_guard import Resolver, TargetNotAllowed, check_target, system_resolver
 from .transport import Transport
-
-STATUS_COMPLETED = "completed"
-STATUS_ABORTED = "aborted"
-STATUS_INTERRUPTED = "interrupted"
-STATUS_FAILED = "failed"
 
 _NS_PER_SECOND = 1_000_000_000
 
@@ -176,14 +179,21 @@ def execute_run(
     now: Callable[[], str] = _utc_now_iso,
     sleep: Callable[[float], None] = time.sleep,
     code: dict[str, Any] | None = None,
+    wall_clock: Callable[[], int] = time.time_ns,
+    dataset_kind: str = DATASET_MEASUREMENT,
+    synthetic: dict[str, Any] | None = None,
 ) -> RunOutcome:
     """Bir çalıştırmayı uçtan uca yürütür ve sonuçları kaydeder.
+
+    `dataset_kind`/`synthetic` yalnızca metadata'ya yazılır; ön kontrol, hedef koruması ve güvenlik
+    sınırları veri türünden bağımsız olarak AYNEN uygulanır.
 
     Ön kontrol başarısızsa `PreflightError` (istek yok). Sonuçlar yazılamazsa `StorageError`.
     Beklenmeyen bir istisnada kısmi sonuçlar kaydedilir ve istisna yeniden fırlatılır.
     """
     try:
         validate_target_label(target_label)
+        validate_dataset_kind(dataset_kind, synthetic)  # istek göndermeden önce; metadata aynı kuralı uygular
         run_id = validate_run_id(run_id) if run_id is not None else generate_run_id()
     except ValueError as exc:
         raise PreflightError(str(exc)) from exc
@@ -199,7 +209,7 @@ def execute_run(
     transport = factory()
     runner = ScenarioRunner(
         transport, config.base_url, run_id, config.timeout_seconds,
-        sleep=sleep, now=now, clock=clock, guard=SafetyGuard(config.limits, clock),
+        sleep=sleep, now=now, clock=clock, guard=SafetyGuard(config.limits, clock), wall_clock=wall_clock,
     )
     status, stop_reason, message = STATUS_COMPLETED, None, None
     pending: BaseException | None = None
@@ -230,7 +240,8 @@ def execute_run(
     metadata = build_run_metadata(
         config, scenarios, started_at, now(),
         config_path=config_path, monotonic_duration_ms=runner.monotonic_duration_ms,
-        target_label=target_label, code=code, inputs=inputs, execution=execution,
+        target_label=target_label, code=code, inputs=inputs, execution=execution, clock=runner.clock_anchor,
+        dataset_kind=dataset_kind, synthetic=synthetic,
     )
     try:
         csv_path, json_path = store.save(run_id, results, metadata, partial=status != STATUS_COMPLETED)

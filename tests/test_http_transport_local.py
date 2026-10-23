@@ -235,3 +235,28 @@ def test_server_shutdown_closes_socket_and_threads():
     assert leftovers == []
     assert srv.is_closed
     assert srv.unexpected_errors() == []
+
+
+def test_close_closes_idle_keepalive_connections_even_if_pool_is_still_referenced(server):
+    """urllib3 2.x PoolManager.clear() havuzları kapatmaz; RequestsTransport.close() bunu açıkça yapmalı.
+
+    Havuza dışarıdan referans tutulması, zaman aşımı istisnalarının oluşturduğu referans döngülerini taklit eder:
+    o durumda soket ancak çöp toplamayla kapanır ve sunucu, bağlantıyı boşta bekleme süresi dolana kadar açık tutar.
+    """
+    url = f"{server.base_url}/hello"
+    before = set(server.handler_threads())
+    transport = RequestsTransport()
+    scenario = Scenario(name="s", method="GET", path="/hello")
+    for _ in range(2):
+        assert transport.send(scenario, url, 5.0).status_code == 200
+    pools = transport._session.get_adapter(url).poolmanager.pools
+    held = [pools[key] for key in pools.keys()]
+    assert held and all(pool.pool is not None for pool in held)
+    new_threads = [t for t in server.handler_threads() if t not in before]
+    assert any(t.is_alive() for t in new_threads)  # keep-alive bağlantısı sunucu tarafında açık
+
+    transport.close()
+    assert all(pool.pool is None for pool in held)  # havuzlar açıkça kapatıldı
+    for thread in new_threads:
+        thread.join(2.0)  # sunucunun boşta bekleme süresinden (5 sn) kısa
+    assert not any(t.is_alive() for t in new_threads)

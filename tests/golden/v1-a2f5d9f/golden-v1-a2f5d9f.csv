@@ -1,0 +1,8 @@
+run_id,scenario,iteration,method,url,started_at,elapsed_ms,duration_ms,status_code,http_ok,business_outcome,error_type,error,response_bytes
+golden-v1-a2f5d9f,login,1,POST,http://127.0.0.1:8080/api/login,2026-10-23T10:00:02.000000+00:00,10.25,10.0,200,true,,,,64
+golden-v1-a2f5d9f,login,2,POST,http://127.0.0.1:8080/api/login,2026-10-23T10:00:03.000000+00:00,11.75,11.5,500,false,,,,16
+golden-v1-a2f5d9f,login,3,POST,http://127.0.0.1:8080/api/login,2026-10-23T10:00:04.000000+00:00,2000.0,,,,,timeout,TransportTimeout: ReadTimeout,
+golden-v1-a2f5d9f,items,1,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:05.000000+00:00,5.5,5.25,200,true,,,,128
+golden-v1-a2f5d9f,items,2,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:06.000000+00:00,6.5,6.25,200,true,,,,128
+golden-v1-a2f5d9f,items,3,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:07.000000+00:00,4.5,4.25,200,true,,,,128
+golden-v1-a2f5d9f,items,4,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:08.000000+00:00,7.5,7.25,200,true,,,,128

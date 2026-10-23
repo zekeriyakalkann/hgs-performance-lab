@@ -9,12 +9,14 @@ değerler olarak kullanılır. Gizli değerler sahtedir.
 """
 
 import json
+from datetime import datetime
 
 import pytest
 from local_http_server import ERROR_BODY, HELLO_BODY, LOOPBACK, LocalHTTPServer, install_network_guard
 
 from hgs2_lab import execution
 from hgs2_lab.cli import EXIT_ABORTED, EXIT_OK, EXIT_REJECTED, main
+from hgs2_lab.clock import ClockAnchor
 from hgs2_lab.config import load_config
 from hgs2_lab.execution import STATUS_ABORTED, execute_run
 from hgs2_lab.http_transport import RequestsTransport
@@ -110,6 +112,35 @@ def test_cli_run_end_to_end_against_local_server(tmp_path, server, capsys, block
         assert FAKE not in text
         assert str(tmp_path) not in text and json.dumps(str(tmp_path))[1:-1] not in text
     assert ("GET", f"/hello?page=1&token={FAKE}") in server.requests_seen()  # istek ham değerle gitti
+    assert block_external_network == []
+
+
+def test_run_records_clock_anchor_and_analyze_reads_it_offline(tmp_path, server, capsys, block_external_network):
+    cfg = write_project(tmp_path, server.base_url,
+                        [{"name": "hello", "method": "GET", "path": "/hello", "repetitions": 12, "warmup_repetitions": 1}])
+    assert main(["run", "--config", str(cfg)]) == EXIT_OK
+    (json_name,) = [n for n in result_files(tmp_path) if n.endswith(".json")]
+    run_id = json_name[: -len(".json")]
+    meta = ResultStore(tmp_path / "results").load_json(run_id).metadata
+
+    # Gerçek saatler, aynı süreç: çapa çalıştırmanın duvar saati aralığı içinde alınır.
+    anchor = ClockAnchor.from_dict(meta["clock"])
+    assert (anchor.monotonic_source, anchor.wall_source) == ("time.perf_counter_ns", "time.time_ns")
+    assert anchor.read_window_ns >= 0
+    started, finished = (datetime.fromisoformat(meta[k]) for k in ("started_at", "finished_at"))
+    assert started <= datetime.fromisoformat(anchor.wall_time_utc) <= finished
+
+    requests_before = len(server.requests_seen())
+    capsys.readouterr()
+    assert main(["analyze", "--config", str(cfg), "--run-id", run_id]) == EXIT_OK
+    assert len(server.requests_seen()) == requests_before  # analiz sunucuya istek göndermez
+    path = tmp_path / "results" / "analysis" / f"{run_id}.analysis.json"
+    analysis = json.loads(path.read_text(encoding="utf-8"))["analysis"]
+    assert analysis["clock"]["available"] is True
+    assert analysis["overall"]["requests"] == {"total": 13, "warmup": 1, "measured": 12}
+    assert analysis["overall"]["measured"]["successful"] == 12
+    assert analysis["overall"]["throughput"]["status"] == "ok"
+    assert analysis["overall"]["response_time_ms"]["median"]["value"] > 0
     assert block_external_network == []
 
 

@@ -1,0 +1,4 @@
+run_id,seq,scenario,iteration,warmup,method,url,started_at,offset_ms,elapsed_ms,duration_ms,status_code,http_ok,business_outcome,error_type,error,response_bytes
+golden-v2-a1331fd-aborted,1,items,1,false,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:02.000000+00:00,0.0,3.0,2.75,200,true,,,,8
+golden-v2-a1331fd-aborted,2,items,2,false,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:03.000000+00:00,3.0,2000.0,,,,,timeout,TransportTimeout: t1,
+golden-v2-a1331fd-aborted,3,items,3,false,GET,http://127.0.0.1:8080/api/items,2026-10-23T10:00:04.000000+00:00,2003.0,2000.0,,,,,timeout,TransportTimeout: t2,

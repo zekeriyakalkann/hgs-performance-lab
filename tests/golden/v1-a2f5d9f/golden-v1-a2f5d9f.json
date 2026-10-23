@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "run_id": "golden-v1-a2f5d9f",
+  "tool_version": "0.1.0",
+  "started_at": "2026-10-23T10:00:01.000000+00:00",
+  "finished_at": "2026-10-23T10:00:09.000000+00:00",
+  "environment": {
+    "python_version": "3.15.0",
+    "python_implementation": "CPython",
+    "platform": "golden-fixture",
+    "machine": "golden-fixture",
+    "processor": "golden-fixture",
+    "cpu_count": 8
+  },
+  "config": {
+    "base_url": "http://127.0.0.1:8080",
+    "timeout_seconds": 2.0,
+    "output_dir": "results",
+    "scenarios_file": "scenarios.json"
+  },
+  "scenarios": [
+    {
+      "name": "login",
+      "method": "POST",
+      "path": "/api/login",
+      "repetitions": 3,
+      "delay_seconds": 0.0,
+      "headers": {},
+      "body": null,
+      "expected_status": [
+        200
+      ]
+    },
+    {
+      "name": "items",
+      "method": "GET",
+      "path": "/api/items",
+      "repetitions": 4,
+      "delay_seconds": 0.0,
+      "headers": {},
+      "body": null,
+      "expected_status": []
+    }
+  ],
+  "results": [
+    {
+      "run_id": "golden-v1-a2f5d9f",
+      "scenario": "login",
+      "iteration": 1,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/login",
+      "started_at": "2026-10-23T10:00:02.000000+00:00",
+      "elapsed_ms": 10.25,
+      "duration_ms": 10.0,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 64
+    },
+    {
+      "run_id": "golden-v1-a2f5d9f",
+      "scenario": "login",
+      "iteration": 2,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/login",
+      "started_at": "2026-10-23T10:00:03.000000+00:00",
+      "elapsed_ms": 11.75,
+      "duration_ms": 11.5,
+      "status_code": 500,
+      "http_ok": false,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 16
+    },
+    {
+      "run_id": "golden-v1-a2f5d9f",
+      "scenario": "login",
+      "iteration": 3,
+      "method": "POST",
+      "url": "http://127.0.0.1:8080/api/login",
+      "started_at": "2026-10-23T10:00:04.000000+00:00",
+      "elapsed_ms": 2000.0,
+      "duration_ms": null,
+      "status_code": null,
+      "http_ok": null,
+      "business_outcome": null,
+      "error_type": "timeout",
+      "error": "TransportTimeout: ReadTimeout",
+      "response_bytes": null
+    },
+    {
+      "run_id": "golden-v1-a2f5d9f",
+      "scenario": "items",
+      "iteration": 1,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:05.000000+00:00",
+      "elapsed_ms": 5.5,
+      "duration_ms": 5.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    },
+    {
+      "run_id": "golden-v1-a2f5d9f",
+      "scenario": "items",
+      "iteration": 2,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:06.000000+00:00",
+      "elapsed_ms": 6.5,
+      "duration_ms": 6.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    },
+    {
+      "run_id": "golden-v1-a2f5d9f",
+      "scenario": "items",
+      "iteration": 3,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:07.000000+00:00",
+      "elapsed_ms": 4.5,
+      "duration_ms": 4.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    },
+    {
+      "run_id": "golden-v1-a2f5d9f",
+      "scenario": "items",
+      "iteration": 4,
+      "method": "GET",
+      "url": "http://127.0.0.1:8080/api/items",
+      "started_at": "2026-10-23T10:00:08.000000+00:00",
+      "elapsed_ms": 7.5,
+      "duration_ms": 7.25,
+      "status_code": 200,
+      "http_ok": true,
+      "business_outcome": null,
+      "error_type": null,
+      "error": null,
+      "response_bytes": 128
+    }
+  ]
+}

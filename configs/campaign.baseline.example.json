@@ -1,0 +1,221 @@
+{
+  "campaign_version": 1,
+  "campaign_id": "camp-baseline-001",
+  "dataset_kind": "synthetic",
+  "description": "Baseline hazırlık kampanyası: 12 temel plan x 3 seed; her anomali planı normal bölümle başlar ve bilinen istek sırasında bozulur (onset_after). Gerçek HGS2 ölçümü değildir.",
+  "seeds": [
+    101,
+    102,
+    103
+  ],
+  "timeout_seconds": 0.3,
+  "plans": [
+    {
+      "plan_id": "normal-steady",
+      "description": "Yalnızca normal yanıt (yanlış alarm referansı)",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "none"
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "normal-paced",
+      "description": "Yalnızca normal yanıt, istekler arası 5 ms aralık",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "none"
+          },
+          "delay_seconds": 0.005
+        }
+      ]
+    },
+    {
+      "plan_id": "fixed-small",
+      "description": "20 normal ölçümden sonra sabit 5 ms gecikme",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 5,
+            "onset_after": 23
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "fixed-large",
+      "description": "20 normal ölçümden sonra sabit 40 ms gecikme",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 40,
+            "onset_after": 23
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "random-narrow",
+      "description": "20 normal ölçümden sonra 2-10 ms rastgele gecikme",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 2,
+            "max_delay_ms": 10,
+            "onset_after": 23
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "random-wide",
+      "description": "20 normal ölçümden sonra 10-80 ms rastgele gecikme",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 10,
+            "max_delay_ms": 80,
+            "onset_after": 23
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "http500-late",
+      "description": "25 normal ölçümden sonra HTTP 500",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "http_error",
+            "status": 500,
+            "onset_after": 28
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "http503-mid",
+      "description": "20 normal ölçümden sonra HTTP 503",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "http_error",
+            "status": 503,
+            "onset_after": 23
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "drop-late",
+      "description": "37 normal ölçümden sonra bağlantı kopması (3 istek)",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "connection_drop",
+            "onset_after": 40
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "timeout-late",
+      "description": "38 normal ölçümden sonra zaman aşımı (2 istek)",
+      "scenarios": [
+        {
+          "name": "stream",
+          "warmup_repetitions": 3,
+          "repetitions": 40,
+          "fault": {
+            "type": "timeout",
+            "onset_after": 41
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "mixed-latency-error",
+      "description": "Rastgele gecikme bölümü, ardından HTTP 502 bölümü",
+      "scenarios": [
+        {
+          "name": "latency",
+          "warmup_repetitions": 3,
+          "repetitions": 20,
+          "fault": {
+            "type": "random_delay",
+            "min_delay_ms": 5,
+            "max_delay_ms": 30,
+            "onset_after": 13
+          }
+        },
+        {
+          "name": "errors",
+          "repetitions": 10,
+          "fault": {
+            "type": "http_error",
+            "status": 502,
+            "onset_after": 5
+          }
+        }
+      ]
+    },
+    {
+      "plan_id": "mixed-delay-timeout",
+      "description": "Sabit 15 ms gecikme bölümü, ardından tek zaman aşımı",
+      "scenarios": [
+        {
+          "name": "latency",
+          "warmup_repetitions": 3,
+          "repetitions": 20,
+          "fault": {
+            "type": "fixed_delay",
+            "delay_ms": 15,
+            "onset_after": 13
+          }
+        },
+        {
+          "name": "tail",
+          "repetitions": 10,
+          "fault": {
+            "type": "timeout",
+            "onset_after": 9
+          }
+        }
+      ]
+    }
+  ]
+}

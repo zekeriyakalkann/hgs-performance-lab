@@ -79,10 +79,12 @@ def test_scenario_snapshot_hides_secrets_but_keeps_other_fields():
 def test_run_metadata_contents_and_no_secrets(tmp_path):
     meta = build(tmp_path, target_label="yerel-test")
     assert set(meta) == {
-        "tool_version", "target_label", "started_at", "finished_at", "monotonic_duration_ms", "execution",
-        "code", "dependencies", "environment", "inputs", "config", "scenarios",
+        "tool_version", "dataset_kind", "target_label", "started_at", "finished_at", "monotonic_duration_ms", "clock",
+        "execution", "code", "dependencies", "environment", "inputs", "config", "scenarios",
     }
+    assert meta["dataset_kind"] == "measurement"  # varsayılan; sentetik deney açıkça işaretlenir
     assert meta["execution"] is None  # doğrudan çağrıda durum verilmedi; çalıştırma akışı doldurur
+    assert meta["clock"] is None  # saat çapasını runner üretir; çalıştırma akışı verir
     assert meta["tool_version"] == __version__
     assert meta["target_label"] == "yerel-test"
     assert meta["monotonic_duration_ms"] == 1234.5
@@ -95,6 +97,11 @@ def test_run_metadata_contents_and_no_secrets(tmp_path):
 
 def test_target_label_is_optional(tmp_path):
     assert build(tmp_path)["target_label"] is None
+
+
+def test_clock_must_be_a_clock_anchor(tmp_path):
+    with pytest.raises(ValueError, match="ClockAnchor"):
+        build(tmp_path, clock={"monotonic_ns": 1})
 
 
 @pytest.mark.parametrize("bad", ["", "   ", 5])
