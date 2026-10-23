@@ -1,0 +1,6 @@
+{
+  "base_url": "http://localhost:8080",
+  "timeout_seconds": 10,
+  "output_dir": "../results",
+  "scenarios_file": "scenarios.example.json"
+}

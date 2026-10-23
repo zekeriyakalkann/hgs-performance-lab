@@ -1,0 +1,4 @@
+# Bağımlılık tanımlarının kaynağı pyproject.toml'dur; kesin sürümler constraints.txt'dedir.
+# "analysis" eki (pandas, numpy, matplotlib) henüz kurulum kapsamında değildir.
+-c constraints.txt
+-e .[dev]
