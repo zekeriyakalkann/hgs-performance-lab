@@ -11,7 +11,8 @@ from ._validate import read_json_file, reject_unknown_keys, require_int, require
 
 ALLOWED_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
 ALLOWED_KEYS = frozenset(
-    {"name", "method", "path", "repetitions", "delay_seconds", "headers", "body", "expected_status"}
+    {"name", "method", "path", "repetitions", "delay_seconds", "headers", "body", "expected_status",
+     "warmup_repetitions"}
 )
 _HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
@@ -31,6 +32,8 @@ class Scenario:
     body: dict | None = None
     # Boşsa 2xx beklenir; doluysa yalnızca listedeki durum kodları http_ok sayılır.
     expected_status: tuple[int, ...] = ()
+    # Ölçüm tekrarlarından önce yapılan, warmup=True olarak kaydedilen istek sayısı.
+    warmup_repetitions: int = 0
 
     def __post_init__(self) -> None:
         err = ScenarioError
@@ -42,6 +45,7 @@ class Scenario:
         if not self.path.startswith("/") or self.path.startswith("//") or re.search(r"\s", self.path):
             raise err(f"path tek '/' ile başlamalı ve boşluk içermemeli: {self.path!r}")
         require_int(self.repetitions, "repetitions", err, minimum=1)
+        require_int(self.warmup_repetitions, "warmup_repetitions", err, minimum=0)
         require_number(self.delay_seconds, "delay_seconds", err, non_negative=True)
 
         if not isinstance(self.headers, dict):
@@ -94,6 +98,7 @@ def scenario_from_dict(data: Any) -> Scenario:
         headers=data.get("headers", {}),
         body=data.get("body"),
         expected_status=tuple(expected),
+        warmup_repetitions=data.get("warmup_repetitions", 0),
     )
 
 

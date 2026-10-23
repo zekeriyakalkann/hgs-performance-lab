@@ -1,10 +1,18 @@
 """Senaryo yürütücü.
 
 Ağ erişimi içermez: istek gönderimi dışarıdan enjekte edilen `Transport` ile
-yapılır (bkz. transport.py). Gerçek HTTP taşıyıcısı bu aşamada YAZILMAMIŞTIR.
+yapılır (bkz. transport.py; gerçek taşıyıcı http_transport.RequestsTransport).
+
+Bir `ScenarioRunner` örneği bir çalıştırmayı temsil eder: `run()` birden çok
+senaryo için çağrılabilir; `seq` bu çağrılar boyunca kesintisiz artar ve
+`offset_ms` ilk `run()` çağrısında alınan ortak monotonik referansa göre
+hesaplanır. Her senaryoda önce `warmup_repetitions` ısınma isteği (warmup=True),
+sonra `repetitions` ölçüm isteği aynı yürütme yolundan geçer.
 
 Yalnızca `TransportError` ailesi ölçüm kaydına çevrilir. Diğer tüm
 istisnalar (programlama hataları dahil) olduğu gibi yayılır.
+
+Kayda yazılan URL ve hata mesajındaki hassas değerler maskelenir (bkz. sanitize.py).
 """
 
 from __future__ import annotations
@@ -15,6 +23,7 @@ from datetime import datetime, timezone
 
 from ._validate import require_number
 from .models import RawResult, validate_run_id
+from .sanitize import sanitize_text, sanitize_url, sensitive_values
 from .scenarios import Scenario
 from .transport import Transport, TransportError, TransportResponse
 
@@ -49,17 +58,45 @@ class ScenarioRunner:
         self._sleep = sleep
         self._now = now
         self._clock = clock
+        self._origin_ns: int | None = None  # çalıştırmanın ortak monotonik başlangıç referansı
+        self._last_ns: int | None = None  # son run() çağrısının bittiği an
+        self._seq = 0
+
+    @property
+    def monotonic_duration_ms(self) -> float | None:
+        """İlk run() başlangıcından son run() bitişine kadar geçen süre; henüz çalışmadıysa None."""
+        if self._origin_ns is None or self._last_ns is None:
+            return None
+        return (self._last_ns - self._origin_ns) / _NS_PER_MS
 
     def run(self, scenario: Scenario) -> list[RawResult]:
+        if self._origin_ns is None:
+            self._origin_ns = self._clock()
         url = self._base_url + scenario.path
+        record_url = sanitize_url(url)
+        secrets = sensitive_values(scenario.headers, url)
+
+        plan = [(True, i) for i in range(1, scenario.warmup_repetitions + 1)]
+        plan += [(False, i) for i in range(1, scenario.repetitions + 1)]
         results: list[RawResult] = []
-        for i in range(1, scenario.repetitions + 1):
-            results.append(self._run_once(scenario, url, i))
-            if scenario.delay_seconds and i < scenario.repetitions:
+        for position, (warmup, iteration) in enumerate(plan, start=1):
+            results.append(self._run_once(scenario, url, record_url, secrets, warmup, iteration))
+            if scenario.delay_seconds and position < len(plan):
                 self._sleep(scenario.delay_seconds)
+        self._last_ns = self._clock()
         return results
 
-    def _run_once(self, scenario: Scenario, url: str, iteration: int) -> RawResult:
+    def _run_once(
+        self,
+        scenario: Scenario,
+        url: str,
+        record_url: str,
+        secrets: list[str],
+        warmup: bool,
+        iteration: int,
+    ) -> RawResult:
+        assert self._origin_ns is not None
+        self._seq += 1
         started_at = self._now()
         response: TransportResponse | None = None
         failure: TransportError | None = None
@@ -73,11 +110,14 @@ class ScenarioRunner:
 
         common = dict(
             run_id=self._run_id,
+            seq=self._seq,
             scenario=scenario.name,
             iteration=iteration,
+            warmup=warmup,
             method=scenario.method,
-            url=url,
+            url=record_url,
             started_at=started_at,
+            offset_ms=(start - self._origin_ns) / _NS_PER_MS,
             elapsed_ms=elapsed_ms,
         )
         if failure is not None:
@@ -87,7 +127,7 @@ class ScenarioRunner:
                 status_code=None,
                 http_ok=None,
                 error_type=failure.error_type,
-                error=_describe(failure),
+                error=sanitize_text(_describe(failure), secrets),
             )
         assert response is not None
         return RawResult(

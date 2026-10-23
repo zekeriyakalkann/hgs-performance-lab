@@ -374,6 +374,40 @@ def test_elapsed_includes_preparation_and_close_but_duration_does_not(monkeypatc
     assert response.closed
 
 
+FAKE = "FAKE-SECRET-123"
+
+
+@pytest.mark.parametrize(
+    "exc_type, translated",
+    [
+        (requests.exceptions.ConnectionError, TransportConnectionError),
+        (requests.exceptions.ReadTimeout, TransportTimeout),
+        (requests.exceptions.ContentDecodingError, TransportError),
+    ],
+)
+def test_error_messages_do_not_leak_query_or_header_secrets(exc_type, translated):
+    url = f"http://h/p?page=2&access_token={FAKE}Q"
+    message = (
+        f"HTTPConnectionPool(host='h', port=80): Max retries exceeded with url: /p?page=2&access_token={FAKE}Q "
+        f"(header Bearer {FAKE}H, proxy http://u:{FAKE}P@proxy)"
+    )
+    transport, _, _ = make(exc_type(message))
+    with pytest.raises(translated) as info:
+        transport.send(scenario(headers={"Authorization": f"Bearer {FAKE}H"}), url, 5.0)
+    text = str(info.value)
+    assert FAKE not in text
+    assert "page=2" in text and "port=80" in text  # hassas olmayan kısımlar korunur
+    assert "access_token=***REDACTED***" in text
+
+
+def test_sanitized_error_is_still_truncated():
+    transport, _, _ = make(requests.exceptions.ConnectionError(f"token={FAKE} " + "x" * 5000))
+    with pytest.raises(TransportConnectionError) as info:
+        transport.send(scenario(), URL, 5.0)
+    assert len(str(info.value)) <= 300
+    assert FAKE not in str(info.value)
+
+
 def test_elapsed_includes_preparation_on_timeout_while_duration_is_absent(monkeypatch):
     clock = FakeClock()
     monkeypatch.setattr(http_transport, "json", SlowJson(clock, 3))

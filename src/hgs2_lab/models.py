@@ -10,6 +10,10 @@
 
 `business_outcome` ileride HGS2 yanıt gövdesinden ayrıştırılacak iş mantığı
 sonucu içindir; şimdilik her zaman boştur.
+
+Zaman alanları: `started_at` duvar saatidir (UTC). `offset_ms`, `elapsed_ms` ve
+`duration_ms` monotonik saatten gelir; `offset_ms` girişimin çalıştırma
+başlangıcına göre konumudur.
 """
 
 from __future__ import annotations
@@ -55,11 +59,14 @@ def validate_run_id(run_id: object) -> str:
 @dataclass(frozen=True)
 class RawResult:
     run_id: str
+    seq: int  # çalıştırma genelinde 1'den başlayan, kesintisiz artan sıra (ısınma dahil)
     scenario: str
-    iteration: int
+    iteration: int  # senaryo içinde, kendi türünde (ısınma ya da ölçüm) 1'den başlayan sıra
+    warmup: bool  # ısınma isteği mi? Analizde ölçümlerden ayrılmalı
     method: str
-    url: str
+    url: str  # hassas sorgu değerleri maskelenmiş URL
     started_at: str  # ISO 8601, UTC; girişimin başladığı duvar saati zamanı
+    offset_ms: float  # girişimin başlangıcı, çalıştırmanın monotonik başlangıç referansına göre
     elapsed_ms: float  # girişimden taşıyıcının sonuç/hata döndürmesine kadar (monotonik saat)
     duration_ms: float | None  # yalnızca HTTP yanıtı alındıysa dolu
     status_code: int | None  # yalnızca HTTP yanıtı alındıysa dolu
@@ -73,7 +80,11 @@ class RawResult:
         validate_run_id(self.run_id)
         for name in ("scenario", "method", "url", "started_at"):
             require_str(getattr(self, name), name, ValueError)
+        require_int(self.seq, "seq", ValueError, minimum=1)  # require_int bool'u reddeder
         require_int(self.iteration, "iteration", ValueError, minimum=1)
+        if not isinstance(self.warmup, bool):
+            raise ValueError(f"warmup bool olmalı (alınan: {type(self.warmup).__name__})")
+        require_number(self.offset_ms, "offset_ms", ValueError, non_negative=True)
         require_number(self.elapsed_ms, "elapsed_ms", ValueError, non_negative=True)
         if self.duration_ms is not None:
             require_number(self.duration_ms, "duration_ms", ValueError, non_negative=True)

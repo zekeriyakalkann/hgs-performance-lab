@@ -2,8 +2,9 @@
 
 HGS2 Spring Boot API'si için akademik performans testi ve analiz aracı (bağımsız Python projesi).
 
-**Durum:** requests tabanlı HTTP taşıyıcısı (`RequestsTransport`) yazıldı ve yalnızca sahte oturumlarla test edildi.
-Hiçbir komuta bağlı değildir: `run` komutu devre dışıdır ve gerçek bir hedefe karşı henüz hiçbir istek gönderilmemiştir.
+**Durum:** requests tabanlı HTTP taşıyıcısı (`RequestsTransport`) sahte oturumlarla ve `127.0.0.1` üzerindeki yerel
+test sunucusuyla doğrulandı. Runner, metadata ve sonuç deposu yalnızca testlerde birlikte çalıştırılıyor; hiçbir komuta
+bağlı değiller. `run` komutu devre dışıdır ve gerçek bir hedefe (HGS2) karşı henüz hiçbir istek gönderilmemiştir.
 
 ## Mimari
 
@@ -13,9 +14,10 @@ Hiçbir komuta bağlı değildir: `run` komutu devre dışıdır ve gerçek bir 
 | `scenarios.py` | Senaryo tanımı, doğrulama, yükleme |
 | `transport.py` | Taşıyıcı arayüzü (`Transport.send`) ve taşıma istisnaları |
 | `http_transport.py` | `RequestsTransport`: requests tabanlı gerçek taşıyıcı, hata çevirisi, süre/boyut ölçümü |
-| `runner.py` | Senaryoyu yürütür, süreyi ölçer, bilinen taşıma hatalarını sınıflandırır |
+| `runner.py` | Bir çalıştırmayı yürütür: ısınma + ölçüm istekleri, `seq`/`offset_ms`, süre ölçümü, taşıma hatası sınıflandırması |
 | `models.py` | `RawResult`: girişim başına ham sonuç kaydı, `run_id` doğrulaması |
-| `metadata.py` | JSON üst verisi: yapılandırma/senaryo/ortam anlık görüntüsü (gizli değerler maskelenir) |
+| `metadata.py` | JSON üst verisi: kod/bağımlılık/ortam bilgisi, girdi dosyası özetleri, maskelenmiş yapılandırma/senaryo görüntüsü |
+| `sanitize.py` | Hassas sorgu değerlerini, URL parolalarını ve hata mesajlarındaki gizli değerleri maskeler |
 | `storage.py` | CSV/JSON yazma ve okuma; üzerine yazmaz, atomik yayımlar |
 | `cli.py` | `validate`, `list`, `run` (devre dışı) |
 | `_validate.py` | Ortak doğrulama yardımcıları |
@@ -24,14 +26,15 @@ Analiz (pandas/numpy/matplotlib) sonraki aşamada `analysis/` altına eklenecek;
 
 ## Kurulum
 
-Bağımlılıkların tek kaynağı `pyproject.toml`'dur.
+Bağımlılık tanımlarının kaynağı `pyproject.toml`'dur; geliştirme ortamının kesin sürümleri `constraints.txt`'dedir.
 
 ```
-pip install -e ".[dev]"            # çekirdek + test
-pip install -e ".[analysis,dev]"   # analiz kütüphaneleri dahil (pandas, numpy, matplotlib)
+pip install -r requirements.txt    # -c constraints.txt ile çekirdek + test ("dev" eki), sabit sürümlerle
+pip install -e ".[analysis,dev]"   # analiz kütüphaneleri dahil; analysis eki henüz sabitlenmedi
 ```
 
-`pip install -r requirements.txt` ikincisine eşdeğerdir.
+Araç sürümünün kaynağı `src/hgs2_lab/__init__.py` içindeki `__version__`'dır; `pyproject.toml`'daki
+`version` ile eşitliği bir birim testiyle denetlenir.
 
 ## Yapılandırma
 
@@ -53,10 +56,32 @@ Bilinmeyen anahtarlar reddedilir (yazım hatalarını yakalamak için).
 ## Senaryolar
 
 `scenarios` listesi boş olamaz; adlar benzersizdir. Alanlar: `name`, `method`, `path` (zorunlu);
-`repetitions` (pozitif tam sayı, varsayılan 1), `delay_seconds` (>= 0), `headers`, `body` (nesne),
-`expected_status` (durum kodu listesi). `expected_status` boşsa 2xx başarılı sayılır.
+`repetitions` (pozitif tam sayı, varsayılan 1), `warmup_repetitions` (negatif olmayan tam sayı, varsayılan 0),
+`delay_seconds` (>= 0), `headers`, `body` (nesne), `expected_status` (durum kodu listesi).
+`expected_status` boşsa 2xx başarılı sayılır.
 
-## Sonuç modeli
+**Isınma:** her senaryoda önce `warmup_repetitions` ısınma isteği, sonra `repetitions` ölçüm isteği gönderilir.
+Isınma istekleri ölçümlerle aynı yoldan geçer ve aynı kurallarla kaydedilir, ama `warmup=true` olarak işaretlenir;
+analizde ayrılmalıdır. `delay_seconds` ısınma dahil ardışık istekler arasında uygulanır.
+
+`path` sorgu parametresi içerebilir (`/items?page=2`). Hassas adlı parametrelerin değerleri sonuçlara ve metadata'ya
+maskelenerek yazılır (bkz. "Sonuç dosyaları"); istek ise değiştirilmeden gönderilir.
+
+## Sonuç modeli (şema 2)
+
+Her istek girişimi bir `RawResult` kaydıdır. Alan sırası (CSV sütun sırası da budur):
+
+`run_id`, `seq`, `scenario`, `iteration`, `warmup`, `method`, `url`, `started_at`, `offset_ms`, `elapsed_ms`,
+`duration_ms`, `status_code`, `http_ok`, `business_outcome`, `error_type`, `error`, `response_bytes`
+
+| Alan | Anlam |
+|---|---|
+| `seq` | Çalıştırma genelinde 1'den başlayan, senaryolar ve ısınma istekleri boyunca kesintisiz artan sıra |
+| `iteration` | Senaryo içinde, kendi türünde (ısınma ya da ölçüm) 1'den başlayan sıra |
+| `warmup` | Isınma isteği mi (`true`/`false`) |
+| `url` | İstek URL'si; hassas sorgu değerleri `***REDACTED***` |
+| `started_at` | Girişimin başladığı UTC duvar saati zamanı (ISO 8601) |
+| `offset_ms` | Girişimin başlangıcı; çalıştırmanın ortak monotonik başlangıç referansına (ilk `run()` çağrısı) göre |
 
 Taşıma düzlemi ile HTTP düzlemi ayrıdır:
 
@@ -68,7 +93,7 @@ Taşıma düzlemi ile HTTP düzlemi ayrıdır:
 * `elapsed_ms`: girişimden taşıyıcının sonuç döndürmesine veya hata vermesine kadar, monotonik saatle (`perf_counter_ns`).
 * `duration_ms`: HTTP yanıtı alındıysa HTTP süresi; taşıyıcı kendi değerini vermezse `elapsed_ms` kullanılır.
 * `business_outcome`: ileride HGS2 yanıt gövdesinden doldurulacak; şimdilik boş.
-* `started_at`: girişimin başladığı UTC duvar saati zamanı.
+* `error`: hata mesajı; hassas sorgu değerleri, URL parolaları ve isteğin hassas header değerleri maskelenir.
 * Taşıyıcı yalnızca `TransportTimeout`, `TransportConnectionError` (veya genel `TransportError`) fırlatmalıdır.
   Diğer istisnalar yakalanmaz ve hata ayıklama için yayılır.
 
@@ -118,10 +143,46 @@ HTTP başlıkları ve ağdaki sıkıştırılmış boyut dahil değildir.
 `results/<run_id>.csv` ve `results/<run_id>.json`. `run_id` harf/rakamla başlar; yalnızca harf, rakam, `.`, `_`, `-` içerir (en çok 64 karakter).
 Var olan bir `run_id` ile dosyaların üzerine yazılmaz.
 
-* CSV: `RawResult` alanları, aynı sırayla. Boş hücre = null, bool = `true`/`false`. `ResultStore.load_csv` tipleri geri kazanır.
-* JSON: `schema_version`, `run_id`, `tool_version`, `started_at`, `finished_at`, `environment` (Python/platform), `config`, `scenarios`, `results`.
-  Adı hassas görünen header/body alanları (`authorization`, `token`, `password`, `cookie`, `api-key` vb.) `***REDACTED***` olarak yazılır.
-  Yine de senaryo dosyalarına gerçek parola veya token yazmayın; ortam değişkeni kullanın.
+**Şema sürümü:** `2`. Yetkili kaynak JSON'daki üst düzey `schema_version`'dır; CSV'de sürüm sütunu yoktur.
+Yalnızca şema 2 okunur. Şema 1 JSON dosyaları ve şema 1 başlıklı CSV dosyaları `UnsupportedSchemaError` ile, açık bir
+mesajla reddedilir; v1 → v2 dönüştürme yoktur (şema 1 ile hiç gerçek sonuç üretilmedi).
+
+* **CSV:** `RawResult` alanları, aynı sırayla. Boş hücre = null, bool = `true`/`false`. `ResultStore.load_csv` tipleri
+  (`seq` int, `offset_ms` float, `warmup` bool dahil) kayıpsız geri kazanır.
+* **JSON:** `schema_version`, `run_id`, metadata alanları ve `results`.
+
+**Metadata alanları** (`build_run_metadata`):
+
+| Alan | İçerik |
+|---|---|
+| `tool_version` | `hgs2_lab.__version__` |
+| `target_label` | İsteğe bağlı, kullanıcının verdiği ortam etiketi; verilmezse `null` |
+| `started_at`, `finished_at` | Çalıştırmanın UTC duvar saati başlangıç/bitişi |
+| `monotonic_duration_ms` | Çalıştırmanın monotonik toplam süresi (`ScenarioRunner.monotonic_duration_ms`) |
+| `code.git_commit` | Kodun bulunduğu Git deposunun HEAD commit kimliği; alınamazsa `null` |
+| `code.git_dirty` | Çalışma ağacı temiz değilse `true`, temizse `false`; alınamazsa `null`. Dosya adları yazılmaz. |
+| `dependencies` | `requests` ve `urllib3` kurulu sürümleri |
+| `environment` | Python sürümü/uygulaması, platform, işlemci, CPU sayısı |
+| `inputs` | `config_file`/`scenarios_file` (yalnızca dosya adı), `config_sha256`/`scenarios_sha256` (orijinal baytların SHA-256 özeti), `hash_errors` |
+| `config` | `base_url`, `timeout_seconds`; `output_dir` ve `scenarios_file` yalnızca ad olarak |
+| `scenarios` | Senaryoların maskelenmiş görüntüsü |
+
+* Git bilgisi sabit argümanlı `git rev-parse --verify HEAD` ve `git status --porcelain` ile, kabuk kullanılmadan ve 5 sn
+  zaman sınırıyla alınır. Git yoksa, kod bir depoda değilse veya komut zaman aşımına uğrarsa değerler `null` olur; bu
+  bir hata sayılmaz.
+* Girdi dosyası okunamazsa özet `null` olur ve `hash_errors` içine yalnızca hata türü (ör. `FileNotFoundError`) yazılır.
+  Dosya içerikleri metadata'ya kopyalanmaz.
+
+**Gizlilik:**
+
+* Adı hassas görünen header/body alanları ve sorgu parametreleri (`token`, `access_token`, `api_key`, `apikey`,
+  `password`, `passwd`, `secret`, `authorization`, `cookie`, `session` vb.; büyük/küçük harf duyarsız) `***REDACTED***`
+  olarak yazılır. URL'nin path kısmı ve hassas olmayan parametreleri olduğu gibi korunur.
+* Hata mesajlarında da aynı maskeleme, URL'deki kullanıcı bilgisi parolası ve isteğin hassas header değerleri için
+  uygulanır.
+* Metadata mutlak yerel yol içermez; dosya ve dizinler yalnızca adlarıyla anılır.
+* Maskeleme anahtar adına dayanır: masum adlı bir alana yazılmış gizli değer maskelenmez. Senaryo dosyalarına gerçek
+  parola veya token yazmayın.
 
 ## Çıkış kodları
 
@@ -150,7 +211,9 @@ hgs2-lab list --config configs/config.json
 Windows'ta proje ortamıyla: `.\.venv\Scripts\python.exe -m pytest ...`.
 `--strict-markers` etkin olduğundan tanımsız işaret adları hata verir.
 
-**Birim testleri** ağ ve soket kullanmaz; taşıyıcı, saat ve `sleep` sahtedir.
+**Birim testleri** ağ ve soket kullanmaz; taşıyıcı, saat ve `sleep` sahtedir. Git metadata'sı sahte `subprocess.run`
+ile sınanır; yalnızca bir duman testi yerel `git` komutunu salt okuma amaçlı çalıştırır ve sonucun türünü denetler.
+`tests/test_pipeline.py` config dosyasından sonuç dosyalarına kadar akışı ağsız olarak uçtan uca sınar.
 
 **Entegrasyon testleri** (`tests/test_http_transport_local.py`, `integration` işaretli) `RequestsTransport`'u
 gerçek soket üzerinden sınar: GET, JSON POST, HTTP 500, izlenmeyen yönlendirme, gecikmeli gövde,

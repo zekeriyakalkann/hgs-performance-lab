@@ -13,6 +13,8 @@ Hata modeli: HTTP yanıtı alınabildiyse (500 dahil) hata fırlatılmaz. Yanıt
 alınamazsa requests hataları `TransportTimeout` / `TransportConnectionError` /
 `TransportError`'a çevrilir. Girdi hataları (geçersiz URL/başlık, serileştirilemeyen
 body, desteklenmeyen metot) ve diğer beklenmeyen istisnalar OLDUĞU GİBİ yayılır.
+Çevrilen hata mesajlarında hassas sorgu değerleri, URL parolaları ve isteğin hassas
+header değerleri maskelenir (bkz. sanitize.py).
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import requests
 from urllib3.exceptions import ReadTimeoutError  # requests'in bağımlılığı
 
 from ._validate import require_number
+from .sanitize import sanitize_text, sensitive_values
 from .scenarios import ALLOWED_METHODS, Scenario
 from .transport import (
     TransportConnectionError,
@@ -37,17 +40,18 @@ from .transport import (
 _MAX_ERROR_CHARS = 300
 
 
-def _describe(exc: Exception) -> str:
-    text = f"{type(exc).__name__}: {exc}"
+def _describe(exc: Exception, secrets: list[str]) -> str:
+    # Önce maskele, sonra kırp: kırpma bir gizli değeri maskelenemez biçimde bölmesin.
+    text = sanitize_text(f"{type(exc).__name__}: {exc}", secrets)
     return text if len(text) <= _MAX_ERROR_CHARS else text[: _MAX_ERROR_CHARS - 3] + "..."
 
 
-def _translate(exc: requests.exceptions.RequestException) -> TransportError | None:
+def _translate(exc: requests.exceptions.RequestException, secrets: list[str]) -> TransportError | None:
     """requests hatasını taşıma hatasına çevirir; çevrilmemesi gereken hata için None döndürür."""
     if isinstance(exc, ValueError):
         # InvalidURL, MissingSchema, InvalidSchema, InvalidHeader...: ölçüm değil girdi hatası.
         return None
-    text = _describe(exc)
+    text = _describe(exc, secrets)
     # ConnectTimeout hem Timeout hem ConnectionError alt sınıfıdır: önce Timeout bakılmalı.
     if isinstance(exc, requests.exceptions.Timeout):
         return TransportTimeout(text)
@@ -96,6 +100,7 @@ class RequestsTransport:
             raise ValueError(f"Desteklenmeyen HTTP metodu: {scenario.method!r}")
         timeout = require_number(timeout_seconds, "timeout_seconds", ValueError, positive=True)
         headers, data = self._prepare(scenario)  # ölçüm dışı; hatalar yayılır
+        secrets = sensitive_values(headers, url)  # hata mesajlarında maskelenecek değerler
 
         start = self._clock()
         try:
@@ -114,7 +119,7 @@ class RequestsTransport:
             finally:
                 response.close()
         except requests.exceptions.RequestException as exc:
-            translated = _translate(exc)
+            translated = _translate(exc, secrets)
             if translated is None:
                 raise
             raise translated from exc

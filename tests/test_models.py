@@ -7,9 +7,16 @@ from hgs2_lab.transport import TransportConnectionError, TransportError, Transpo
 
 def test_field_order_matches_spec():
     assert RawResult.field_names() == [
-        "run_id", "scenario", "iteration", "method", "url", "started_at", "elapsed_ms", "duration_ms",
-        "status_code", "http_ok", "business_outcome", "error_type", "error", "response_bytes",
+        "run_id", "seq", "scenario", "iteration", "warmup", "method", "url", "started_at", "offset_ms",
+        "elapsed_ms", "duration_ms", "status_code", "http_ok", "business_outcome", "error_type", "error",
+        "response_bytes",
     ]
+
+
+def test_new_v2_fields_accept_valid_values():
+    r = make_result(seq=7, offset_ms=1234.5, warmup=True)
+    assert (r.seq, r.offset_ms, r.warmup) == (7, 1234.5, True)
+    assert make_result(offset_ms=0).offset_ms == 0  # sıfır ve tam sayı geçerli
 
 
 def test_http_500_is_a_response_not_a_transport_error():
@@ -48,6 +55,20 @@ def test_succeeded_reflects_http_ok():
         {"response_bytes": -1},
         {"scenario": ""},
         {"business_outcome": ""},
+        {"seq": 0},
+        {"seq": -1},
+        {"seq": True},  # bool, int'in alt sınıfıdır; yine de reddedilmeli
+        {"seq": 1.0},
+        {"seq": "1"},
+        {"offset_ms": -0.001},
+        {"offset_ms": float("nan")},
+        {"offset_ms": float("inf")},
+        {"offset_ms": True},
+        {"offset_ms": "0"},
+        {"warmup": 1},
+        {"warmup": 0},
+        {"warmup": None},
+        {"warmup": "false"},
     ],
 )
 def test_inconsistent_response_record_rejected(override):

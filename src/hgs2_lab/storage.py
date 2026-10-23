@@ -7,6 +7,9 @@
   yazan iki süreç için kalır.)
 * CSV ve JSON aynı `RawResult` alanlarını aynı sırayla taşır. CSV'de None boş
   hücre, bool ise `true`/`false` olarak yazılır; `load_csv` tipleri geri kazanır.
+* Şema sürümünün yetkili kaynağı JSON'daki üst düzey `schema_version`'dır; CSV'de
+  sürüm sütunu yoktur. Yalnızca SCHEMA_VERSION okunur; eski sürümler açık bir
+  hatayla reddedilir (dönüştürme yoktur).
 """
 
 from __future__ import annotations
@@ -21,8 +24,13 @@ from typing import Any, NamedTuple
 
 from .models import RawResult, validate_run_id
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _RESERVED_METADATA_KEYS = frozenset({"schema_version", "run_id", "results"})
+# Şema v1 CSV başlığı; yalnızca anlaşılır bir uyumsuzluk hatası vermek için tutulur.
+_V1_CSV_FIELDS = [
+    "run_id", "scenario", "iteration", "method", "url", "started_at", "elapsed_ms", "duration_ms",
+    "status_code", "http_ok", "business_outcome", "error_type", "error", "response_bytes",
+]
 
 
 class StorageError(Exception):
@@ -31,6 +39,10 @@ class StorageError(Exception):
 
 class ResultExistsError(StorageError):
     """Bu run_id için sonuç dosyaları zaten var."""
+
+
+class UnsupportedSchemaError(StorageError):
+    """Dosya, bu sürümün okumadığı bir sonuç şemasına ait."""
 
 
 class StoredRun(NamedTuple):
@@ -52,11 +64,14 @@ def _optional(parser: Callable[[str], Any]) -> Callable[[str], Any]:
 
 _CSV_PARSERS: dict[str, Callable[[str], Any]] = {
     "run_id": str,
+    "seq": int,
     "scenario": str,
     "iteration": int,
+    "warmup": _parse_bool,
     "method": str,
     "url": str,
     "started_at": str,
+    "offset_ms": float,
     "elapsed_ms": float,
     "duration_ms": _optional(float),
     "status_code": _optional(int),
@@ -158,8 +173,14 @@ class ResultStore:
         except json.JSONDecodeError as exc:
             raise StorageError(f"JSON sonuç dosyası geçerli değil ({json_path}): {exc}") from exc
 
-        if not isinstance(document, dict) or document.get("schema_version") != SCHEMA_VERSION:
-            raise StorageError(f"Desteklenmeyen veya eksik schema_version (beklenen {SCHEMA_VERSION}): {json_path}")
+        if not isinstance(document, dict):
+            raise StorageError(f"JSON sonuç dosyası bir nesne değil: {json_path}")
+        version = document.get("schema_version")
+        if version != SCHEMA_VERSION:
+            raise UnsupportedSchemaError(
+                f"Desteklenmeyen veya eksik schema_version {version!r}: bu sürüm yalnızca şema "
+                f"{SCHEMA_VERSION} sonuçlarını okur, eski sürümler dönüştürülmez ({json_path})"
+            )
         if document.get("run_id") != run_id:
             raise StorageError(f"Dosyadaki run_id ({document.get('run_id')!r}) istenen run_id ile uyuşmuyor")
         rows = document.get("results")
@@ -177,6 +198,11 @@ class ResultStore:
         try:
             with csv_path.open(encoding="utf-8", newline="") as f:
                 reader = csv.DictReader(f)
+                if reader.fieldnames == _V1_CSV_FIELDS:
+                    raise UnsupportedSchemaError(
+                        f"CSV başlığı şema 1'e ait; bu sürüm yalnızca şema {SCHEMA_VERSION} sonuçlarını okur, "
+                        f"eski sürümler dönüştürülmez ({csv_path})"
+                    )
                 if reader.fieldnames != RawResult.field_names():
                     raise StorageError(f"CSV başlığı beklenen alanlarla uyuşmuyor: {csv_path}")
                 results = []

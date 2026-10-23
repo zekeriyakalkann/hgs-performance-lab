@@ -167,3 +167,84 @@ def test_constructor_validates_run_id_and_timeout():
     for bad in (0, -1, float("nan"), float("inf"), True, "5"):
         with pytest.raises(ValueError):
             ScenarioRunner(transport, "http://h", "r1", bad, clock=clock)
+
+
+# Şema v2: seq, offset_ms, warmup
+FAKE = "FAKE-SECRET-123"
+
+
+def test_seq_is_continuous_across_scenarios_warmups_and_repetitions():
+    runner, _ = make_runner([(1, TransportResponse(200))] * 6)
+    first = runner.run(scenario(name="a", repetitions=2, warmup_repetitions=1))
+    second = runner.run(scenario(name="b", repetitions=3))
+    results = first + second
+    assert [r.seq for r in results] == [1, 2, 3, 4, 5, 6]
+    assert [(r.scenario, r.warmup, r.iteration) for r in results] == [
+        ("a", True, 1), ("a", False, 1), ("a", False, 2),
+        ("b", False, 1), ("b", False, 2), ("b", False, 3),
+    ]
+
+
+def test_offset_ms_uses_one_monotonic_origin_for_the_whole_run():
+    clock = FakeClock()
+    transport = FakeTransport(clock, [(20, TransportResponse(200)), (30, TransportResponse(200)),
+                                      (5, TransportTimeout("t")), (10, TransportResponse(200))])
+    runner = ScenarioRunner(
+        transport, "http://h", "r1", 5.0,
+        sleep=lambda seconds: clock.advance_ms(seconds * 1000),  # bekleme de saati ilerletir
+        now=lambda: "2026-01-01T00:00:00+00:00", clock=clock,
+    )
+    assert runner.monotonic_duration_ms is None  # henüz çalışmadı
+    a = runner.run(scenario(name="a", repetitions=2, delay_seconds=0.1))
+    clock.advance_ms(50)  # senaryolar arası boşluk (ör. orkestratör işi)
+    b = runner.run(scenario(name="b", repetitions=2))
+    # a1: 0, süre 20, bekleme 100 -> a2: 120, süre 30 -> boşluk 50 -> b1: 200 (timeout, 5) -> b2: 205
+    assert [r.offset_ms for r in a + b] == [0.0, 120.0, 200.0, 205.0]
+    assert [r.elapsed_ms for r in a + b] == [20.0, 30.0, 5.0, 10.0]  # elapsed_ms anlamı değişmedi
+    assert b[0].error_type == "timeout" and b[0].offset_ms == 200.0
+    assert runner.monotonic_duration_ms == 215.0
+
+
+def test_warmup_requests_follow_same_path_and_are_counted_separately():
+    sleeps = []
+    outcomes = [(1, TransportResponse(200))] * 2 + [(1, TransportResponse(500))] + [(1, TransportResponse(200))] * 2
+    runner, transport = make_runner(outcomes, sleeps)
+    results = runner.run(scenario(repetitions=3, warmup_repetitions=2, delay_seconds=0.5))
+    assert len(transport.calls) == 5  # 2 ısınma + 3 ölçüm, aynı taşıyıcıdan
+    warmups = [r for r in results if r.warmup]
+    measured = [r for r in results if not r.warmup]
+    assert [r.iteration for r in warmups] == [1, 2]
+    assert [r.iteration for r in measured] == [1, 2, 3]
+    assert [r.seq for r in results] == [1, 2, 3, 4, 5]
+    assert measured[0].status_code == 500 and measured[0].http_ok is False  # aynı kayıt kuralları
+    assert sleeps == [0.5] * 4  # isteklerin arasında, sonuncudan sonra değil
+
+
+def test_default_scenarios_have_no_warmup():
+    runner, transport = make_runner([(1, TransportResponse(200))] * 2)
+    results = runner.run(scenario(repetitions=2))
+    assert len(transport.calls) == 2
+    assert [r.warmup for r in results] == [False, False]
+
+
+def test_recorded_url_masks_sensitive_query_but_transport_gets_raw_url():
+    runner, transport = make_runner([(1, TransportResponse(200))])
+    (r,) = runner.run(scenario(path=f"/p?page=2&token={FAKE}&q=x"))
+    assert transport.calls[0][0] == f"http://h/p?page=2&token={FAKE}&q=x"  # istek değişmez
+    assert r.url == "http://h/p?page=2&token=***REDACTED***&q=x"
+    assert FAKE not in str(r.to_dict())
+
+
+def test_non_sensitive_query_is_recorded_unchanged():
+    runner, _ = make_runner([(1, TransportResponse(200))])
+    (r,) = runner.run(scenario(path="/p?page=2&size=10&sort=name%2Casc"))
+    assert r.url == "http://h/p?page=2&size=10&sort=name%2Casc"
+
+
+def test_transport_error_message_is_sanitized():
+    error = TransportConnectionError(f"failed /p?api_key={FAKE}X with Bearer {FAKE} for http://u:{FAKE}Y@h")
+    runner, _ = make_runner([(1, error)])
+    (r,) = runner.run(scenario(path=f"/p?api_key={FAKE}X", headers={"Authorization": f"Bearer {FAKE}"}))
+    assert r.error_type == "connection_error"
+    assert FAKE not in r.error
+    assert r.error.startswith("TransportConnectionError: failed /p?api_key=***REDACTED***")

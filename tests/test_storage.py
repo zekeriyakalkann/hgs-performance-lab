@@ -6,7 +6,18 @@ import pytest
 from factories import make_failed_result, make_result
 
 from hgs2_lab.models import InvalidRunId, RawResult
-from hgs2_lab.storage import SCHEMA_VERSION, ResultExistsError, ResultStore, StorageError
+from hgs2_lab.storage import (
+    SCHEMA_VERSION,
+    ResultExistsError,
+    ResultStore,
+    StorageError,
+    UnsupportedSchemaError,
+)
+
+V1_FIELDS = [
+    "run_id", "scenario", "iteration", "method", "url", "started_at", "elapsed_ms", "duration_ms",
+    "status_code", "http_ok", "business_outcome", "error_type", "error", "response_bytes",
+]
 
 META = {
     "tool_version": "0.1.0",
@@ -19,9 +30,11 @@ META = {
 
 def sample_results():
     return [
-        make_result(),
-        make_result(iteration=2, status_code=500, http_ok=False, elapsed_ms=40.25, duration_ms=40.25),
-        make_failed_result(iteration=3, error='TransportConnectionError: "x", y\nsatır2', error_type="connection_error"),
+        make_result(seq=1, iteration=1, warmup=True, offset_ms=0.0),
+        make_result(seq=2, iteration=1, status_code=500, http_ok=False, offset_ms=12.75, elapsed_ms=40.25,
+                    duration_ms=40.25),
+        make_failed_result(seq=3, iteration=2, offset_ms=53.0625,
+                           error='TransportConnectionError: "x", y\nsatır2', error_type="connection_error"),
     ]
 
 
@@ -145,6 +158,45 @@ def test_csv_cell_representation(tmp_path):
     assert rows[0]["http_ok"] == "true" and rows[1]["http_ok"] == "false"
     assert rows[2]["http_ok"] == "" and rows[2]["status_code"] == "" and rows[2]["duration_ms"] == ""
     assert rows[0]["error_type"] == "" and rows[0]["business_outcome"] == ""
+    assert [r["warmup"] for r in rows] == ["true", "false", "false"]
+    assert [r["seq"] for r in rows] == ["1", "2", "3"]
+    assert [r["offset_ms"] for r in rows] == ["0.0", "12.75", "53.0625"]
+    assert "schema_version" not in rows[0]  # CSV'de sürüm sütunu yok; yetkili kaynak JSON
+
+
+def test_schema_version_is_2():
+    assert SCHEMA_VERSION == 2
+
+
+def test_v2_fields_roundtrip_losslessly_through_csv_and_json(tmp_path):
+    store = ResultStore(tmp_path)
+    original = sample_results()
+    store.save("r1", original, META)
+    for loaded in (store.load_csv("r1"), store.load_json("r1").results):
+        assert [(r.seq, r.offset_ms, r.warmup) for r in loaded] == [(1, 0.0, True), (2, 12.75, False), (3, 53.0625, False)]
+        assert all(type(r.seq) is int and type(r.offset_ms) is float and type(r.warmup) is bool for r in loaded)
+        assert loaded == original
+
+
+def test_v1_json_is_rejected_with_clear_message(tmp_path):
+    v1_row = dict.fromkeys(V1_FIELDS)
+    (tmp_path / "old1.json").write_text(
+        json.dumps({"schema_version": 1, "run_id": "old1", "results": [v1_row]}), encoding="utf-8"
+    )
+    with pytest.raises(UnsupportedSchemaError, match=r"schema_version 1.*yalnızca şema 2"):
+        ResultStore(tmp_path).load_json("old1")
+
+
+def test_missing_schema_version_is_rejected(tmp_path):
+    (tmp_path / "nov.json").write_text(json.dumps({"run_id": "nov", "results": []}), encoding="utf-8")
+    with pytest.raises(UnsupportedSchemaError, match="schema_version None"):
+        ResultStore(tmp_path).load_json("nov")
+
+
+def test_v1_csv_is_rejected_with_clear_message(tmp_path):
+    (tmp_path / "old1.csv").write_text(",".join(V1_FIELDS) + "\n", encoding="utf-8")
+    with pytest.raises(UnsupportedSchemaError, match=r"başlığı şema 1'e ait.*yalnızca şema 2"):
+        ResultStore(tmp_path).load_csv("old1")
 
 
 def test_empty_results_are_saved(tmp_path):
@@ -163,7 +215,9 @@ def test_load_csv_errors(tmp_path):
         store.load_csv("bad")
 
     csv_path, _ = store.save("ok", [make_result(run_id="ok")], META)
-    broken = csv_path.read_text(encoding="utf-8").replace(",1,GET,", ",x,GET,")
+    original_text = csv_path.read_text(encoding="utf-8")
+    assert original_text.count(",1,false,GET,") == 1  # iteration sütunu (warmup ve method'dan önce)
+    broken = original_text.replace(",1,false,GET,", ",x,false,GET,")
     (tmp_path / "broken.csv").write_text(broken, encoding="utf-8")
     with pytest.raises(StorageError, match="satır 2"):
         store.load_csv("broken")

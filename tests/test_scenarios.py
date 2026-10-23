@@ -11,6 +11,7 @@ def test_from_dict_defaults_and_method_normalized():
     s = scenario_from_dict({**VALID, "method": "get"})
     assert s.method == "GET"
     assert s.repetitions == 1
+    assert s.warmup_repetitions == 0  # mevcut senaryo JSON'ları değişmeden çalışır
     assert s.delay_seconds == 0.0
     assert s.headers == {} and s.body is None
     assert s.expected_status == ()
@@ -23,6 +24,16 @@ def test_from_dict_full():
     )
     assert s.expected_status == (200, 201)
     assert s.body == {"k": 1}
+
+
+def test_warmup_repetitions_from_dict():
+    assert scenario_from_dict({**VALID, "warmup_repetitions": 3}).warmup_repetitions == 3
+    assert scenario_from_dict({**VALID, "warmup_repetitions": 0}).warmup_repetitions == 0
+
+
+def test_query_string_in_path_is_still_allowed():
+    # Maskeleme sonuç yazımında yapılır; endpoint doğrulaması daraltılmadı.
+    assert scenario_from_dict({**VALID, "path": "/x?page=2&token=FAKE-TOKEN"}).path == "/x?page=2&token=FAKE-TOKEN"
 
 
 def test_expected_status_semantics():
@@ -48,6 +59,11 @@ def test_expected_status_semantics():
         {"expected_status": 200}, {"expected_status": [True]}, {"expected_status": [99]},
         {"expected_status": [600]}, {"expected_status": ["200"]},
         {"unknown_key": 1},
+        {"warmup_repetitions": -1},
+        {"warmup_repetitions": True},
+        {"warmup_repetitions": 1.5},
+        {"warmup_repetitions": "2"},
+        {"warmup_repetitions": None},
     ],
 )
 def test_invalid_scenario_dict(override):
