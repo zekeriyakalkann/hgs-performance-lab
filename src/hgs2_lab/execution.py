@@ -9,6 +9,9 @@ Akış:
 2. İstekler başlamadan Git bilgisi ve girdi dosyası özetleri alınır.
 3. Runner, `SafetyGuard` ile çalışır: süre sınırı, art arda taşıma hatası ve hata oranı eşiği.
 4. Sonuç ne olursa olsun taşıyıcı kapatılır, tamamlanan kayıtlar metadata ile kaydedilir.
+5. İsteğe bağlı telemetri (`telemetry`): istekler boyunca örneklenir ve sonuçlardan SONRA ayrı dosyaya yazılır
+   (`<output_dir>/telemetry/`, bkz. telemetry.py). Sonuç dosyaları (şema v2) değişmez; telemetri hatası
+   çalıştırmayı durdurmaz, `RunOutcome.telemetry_error` ile bildirilir.
 
 Çalıştırma durumları (`execution.status`):
 * completed  : tüm planlanan istekler yapıldı -> `<run_id>.csv/json`
@@ -28,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
+from .analysis import write_document
 from .config import LabConfig, RunLimits
 from .http_transport import RequestsTransport
 from .metadata import build_run_metadata, code_info, input_hashes, validate_dataset_kind, validate_target_label
@@ -45,6 +49,8 @@ from .sanitize import sanitize_text
 from .scenarios import Scenario
 from .storage import ResultStore
 from .target_guard import Resolver, TargetNotAllowed, check_target, system_resolver
+from .telemetry import TelemetryRecorder
+from .telemetry import output_paths as telemetry_output_paths
 from .transport import Transport
 
 _NS_PER_SECOND = 1_000_000_000
@@ -68,6 +74,8 @@ class RunOutcome:
     results: list[RawResult] = field(default_factory=list)
     csv_path: Path | None = None
     json_path: Path | None = None
+    telemetry_path: Path | None = None
+    telemetry_error: str | None = None
 
     @property
     def completed(self) -> bool:
@@ -182,11 +190,15 @@ def execute_run(
     wall_clock: Callable[[], int] = time.time_ns,
     dataset_kind: str = DATASET_MEASUREMENT,
     synthetic: dict[str, Any] | None = None,
+    telemetry: TelemetryRecorder | None = None,
 ) -> RunOutcome:
     """Bir çalıştırmayı uçtan uca yürütür ve sonuçları kaydeder.
 
     `dataset_kind`/`synthetic` yalnızca metadata'ya yazılır; ön kontrol, hedef koruması ve güvenlik
     sınırları veri türünden bağımsız olarak AYNEN uygulanır.
+
+    `telemetry` verilirse ilk istekten hemen önce başlatılır, son istekten sonra durdurulur ve sonuçlar
+    kaydedildikten sonra ayrı dosyaya yazılır. Telemetri dosyası zaten varsa ön kontrolde reddedilir.
 
     Ön kontrol başarısızsa `PreflightError` (istek yok). Sonuçlar yazılamazsa `StorageError`.
     Beklenmeyen bir istisnada kısmi sonuçlar kaydedilir ve istisna yeniden fırlatılır.
@@ -199,6 +211,10 @@ def execute_run(
         raise PreflightError(str(exc)) from exc
     store = ResultStore(config.output_dir)
     planned = preflight(config, scenarios, store=store, run_id=run_id, resolver=resolver)
+    if telemetry is not None:
+        existing = [p for p in telemetry_output_paths(config.output_dir, run_id) if p.exists()]
+        if existing:
+            raise PreflightError(f"Bu run_id için telemetri dosyası zaten var, üzerine yazılmaz: {existing[0].name}")
 
     # İstekler başlamadan: kod sürümü ve girdi dosyalarının özetleri.
     code = code if code is not None else code_info()
@@ -214,6 +230,8 @@ def execute_run(
     status, stop_reason, message = STATUS_COMPLETED, None, None
     pending: BaseException | None = None
     try:
+        if telemetry is not None:
+            telemetry.start()  # KeyboardInterrupt dışında istisna fırlatmaz
         for scenario in scenarios:
             runner.run(scenario)
     except RunStopped as exc:
@@ -226,6 +244,8 @@ def execute_run(
         status, stop_reason, message = STATUS_FAILED, "unexpected_error", type(exc).__name__
         pending = exc
     finally:
+        if telemetry is not None:
+            telemetry.stop()
         transport.close()
 
     results = runner.results
@@ -249,9 +269,27 @@ def execute_run(
         if pending is not None:
             raise pending
         raise
+    telemetry_path, telemetry_error = None, None
+    if telemetry is not None:
+        telemetry_path, telemetry_error = _save_telemetry(
+            telemetry, config.output_dir, run_id, partial=status != STATUS_COMPLETED, anchor=runner.clock_anchor,
+            dataset_kind=dataset_kind, generated_at=now(), result_files=(json_path, csv_path),
+        )
     if pending is not None:
         raise pending
-    return RunOutcome(run_id, status, stop_reason, execution["message"], planned, results, csv_path, json_path)
+    return RunOutcome(run_id, status, stop_reason, execution["message"], planned, results, csv_path, json_path,
+                      telemetry_path, telemetry_error)
+
+
+def _save_telemetry(telemetry: TelemetryRecorder, output_dir: Path, run_id: str, *, partial: bool,
+                    **document_args: Any) -> tuple[Path | None, str | None]:
+    """Telemetri belgesini yazar; hata sonuçları etkilemez, (yol, hata metni) olarak döner."""
+    path = telemetry_output_paths(output_dir, run_id)[1 if partial else 0]
+    try:
+        write_document(telemetry.document(run_id, **document_args), path)
+    except Exception as exc:  # noqa: BLE001 - sonuçlar zaten kaydedildi; telemetri eksikliği bildirilir
+        return None, sanitize_text(f"{type(exc).__name__}: {exc}")
+    return path, None
 
 
 def summarize(results: Sequence[RawResult]) -> dict[str, Any]:

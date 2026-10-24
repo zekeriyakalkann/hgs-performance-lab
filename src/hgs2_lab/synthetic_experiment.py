@@ -8,6 +8,7 @@ güvenlik sınırları değişmeden uygulanır. Sentetik sunucu yalnızca normal
 * `<run_id>[.partial].csv/json`  : istemci sonuçları (şema v2, metadata'da `dataset_kind = "synthetic"`)
 * `synthetic/<stem>.server-events.json` : sunucu tarafı olaylar (ayrı kaynak; uygulanan hatayı içerir)
 * `synthetic/<stem>.labels.json` : beklenen / gözlenen / uyum ve deney geçerliliği
+* `telemetry/<stem>.telemetry.json` : yalnızca `telemetry` verilirse; sistem telemetrisi (bkz. telemetry.py)
 Hiçbir dosyanın üzerine yazılmaz; dosyalar varsa hiçbir istek gönderilmeden reddedilir.
 """
 
@@ -40,6 +41,8 @@ from .synthetic import (
 )
 from .synthetic_server import HOLD_METHOD, HOLD_SLICE_SECONDS, SyntheticServer
 from .target_guard import Resolver, system_resolver
+from .telemetry import TelemetryRecorder
+from .telemetry import output_paths as telemetry_output_paths
 
 SYNTHETIC_DIR_NAME = "synthetic"
 SERVER_EVENTS_FORMAT = "hgs2-lab-synthetic-server-events"
@@ -142,8 +145,13 @@ def run_synthetic_experiment(
     resolver: Resolver = system_resolver,
     server_factory: Callable[[SyntheticPlan], SyntheticServer] = SyntheticServer,
     now: Callable[[], str] = _utc_now_iso,
+    telemetry: TelemetryRecorder | None = None,
 ) -> SyntheticOutcome:
-    """Sentetik deneyi yürütür. Manifest hatası ManifestError; ön kontrol PreflightError (istek yok)."""
+    """Sentetik deneyi yürütür. Manifest hatası ManifestError; ön kontrol PreflightError (istek yok).
+
+    `telemetry` verilirse `execute_run`'a aynen geçirilir: sunucu başlatıldıktan sonra, ilk istekten hemen önce
+    başlar; telemetri dosyası etiketlere ve sunucu olaylarına girmez.
+    """
     manifest_path = Path(manifest_path).resolve()
     manifest, manifest_sha256, plan = prepare(manifest_path)
     try:
@@ -153,7 +161,7 @@ def run_synthetic_experiment(
 
     existing = ResultStore(results_dir).existing_files(run_id) + [
         p for partial in (False, True) for p in output_paths(results_dir, run_id, partial) if p.exists()
-    ]
+    ] + ([p for p in telemetry_output_paths(results_dir, run_id) if p.exists()] if telemetry is not None else [])
     if existing:
         raise PreflightError(f"Bu run_id için dosya zaten var, üzerine yazılmaz: {existing[0].name}")
 
@@ -182,7 +190,7 @@ def run_synthetic_experiment(
         outcome = execute_run(
             config, [s.to_engine_scenario() for s in manifest.scenarios], config_path=manifest_path,
             target_label=f"synthetic:{manifest.experiment_id}", run_id=run_id, resolver=resolver,
-            dataset_kind=DATASET_SYNTHETIC, synthetic=synthetic_meta,
+            dataset_kind=DATASET_SYNTHETIC, synthetic=synthetic_meta, telemetry=telemetry,
         )
     finally:
         leftovers = server.stop()

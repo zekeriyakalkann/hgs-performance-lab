@@ -8,7 +8,8 @@ analiz edilir (betimleyici istatistikler; ağ erişimi yok). `synthetic` komutla
 sunucusuna (yalnızca `127.0.0.1`) karşı planlı hatalarla **sentetik** ve etiketli deneyler üretir; bunlar gerçek
 HGS2 ölçümü değildir ve sonuçlarda `dataset_kind = "synthetic"` ile ayrılır. Araç bugüne kadar yalnızca testlerdeki
 ve kendi sentetik yerel HTTP sunucularına karşı çalıştırıldı. **Gerçek HGS2 API'sine karşı hiçbir test veya ölçüm yapılmadı**; loopback dışı bir
-hedefe izin veren bir ayar da yoktur. **Anomali tespiti veya eğitilmiş bir makine öğrenmesi modeli yoktur.**
+hedefe izin veren bir ayar da yoktur. **Eğitilmiş bir makine öğrenmesi modeli yoktur.** Tek dedektör, sentetik
+özellik tablosu üzerinde çalışan istatistiksel Robust Z-score'dur (F5); gerçek HGS2 verisiyle değerlendirilmedi.
 
 ## Mimari
 
@@ -19,6 +20,7 @@ Sentetik: Manifest -> Plan (seed) -> SyntheticServer (127.0.0.1) <- Ölçüm ak�
           + sunucu olayları (ayrı kaynak) + etiketler (beklenen / gözlenen / uyum) -> results/synthetic/
 Kampanya: Kampanya manifesti -> (plan x seed) deney manifestleri -> her biri Sentetik akış -> campaign.json (katalog)
 Veri seti: campaign.json -> doğrulama (SHA-256, etiket/plan tutarlılığı) -> grup bazlı train/validation/test manifesti
+Telemetri: (isteğe bağlı, --telemetry) TelemetryRecorder (arka plan iş parçacığı) -> <sonuç dizini>/telemetry/ (ayrı dosya)
 ```
 
 Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `clock.py` ağ koduna (`requests`, `urllib3`,
@@ -32,6 +34,7 @@ Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `
 | `target_guard.py` | Hedef güvenliği: şema/ad izin listesi, ad çözümlemesi, loopback denetimi |
 | `runner.py` | Senaryoları yürütür: ısınma + ölçüm istekleri, `seq`/`offset_ms`, süre ölçümü, güvenlik kancaları, saat çapası |
 | `clock.py` | `ClockAnchor`: monotonik başlangıç referansı ile UTC duvar saatinin birlikte kaydı |
+| `telemetry.py` | Sistem telemetrisi (F4): CPU, bellek, disk, TCP sayaçlarının zaman damgalı örneklenmesi; ayrı dosya (ağ kodu yok) |
 | `transport.py` | Taşıyıcı arayüzü (`Transport.send`) ve taşıma istisnaları |
 | `http_transport.py` | `RequestsTransport`: requests tabanlı taşıyıcı, bağlantı katmanında loopback koruması, hata çevirisi |
 | `models.py` | `RawResult`: girişim başına ham sonuç kaydı, `run_id` doğrulaması |
@@ -47,6 +50,8 @@ Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `
 | `campaign_runner.py` | Kampanyayı yürütür: her deney mevcut sentetik akışla, hata yalıtımlı; `campaign.json` katalog |
 | `dataset.py` | Doğrulanmış katalogdan grup bazlı train/validation/test veri seti manifesti, sızıntı ve bütünlük denetimleri (ağ yok) |
 | `features.py` | Doğrulanmış veri setinden deterministik özellik tablosu: `features.csv` (gözlemler) + `labels.csv` (tasarım/hedef) + manifest (ağ yok) |
+| `robust_z.py` | Robust Z-score dedektörü (F5): yalnızca `duration_ms` listesinden kalibrasyon ve skor; tablo/etiket görmez (ağ yok) |
+| `detection.py` | Özellik tablosunun doğrulanması, train normal kalibrasyonu, bölüm bazında değerlendirme ve metrikler (ağ yok) |
 | `cli.py` | `validate`, `list`, `run`, `analyze`, `synthetic validate/plan/run`, `campaign validate/run/verify`, `dataset build` |
 | `_validate.py` | Ortak doğrulama yardımcıları |
 
@@ -129,17 +134,20 @@ maskelenerek yazılır; istek ise değiştirilmeden gönderilir.
 hgs2-lab validate [--config DOSYA] [--scenarios DOSYA]
 hgs2-lab list     [--config DOSYA] [--scenarios DOSYA]
 hgs2-lab run      [--config DOSYA] [--scenarios DOSYA] [--target-label ETİKET]
+                  [--telemetry [--telemetry-interval-ms N]]
 hgs2-lab analyze  --run-id RUN_ID [--results-dir DİZİN | --config DOSYA] [--output DOSYA]
                   [--seed N] [--bootstrap-resamples N] [--confidence C] [--min-tail-samples N]
 hgs2-lab synthetic validate --manifest DOSYA
 hgs2-lab synthetic plan     --manifest DOSYA [--output DOSYA]
 hgs2-lab synthetic run      --manifest DOSYA --results-dir DİZİN [--run-id RUN_ID]
+                            [--telemetry [--telemetry-interval-ms N]]
 hgs2-lab campaign validate  --manifest DOSYA
 hgs2-lab campaign run       --manifest DOSYA --output-dir DİZİN
 hgs2-lab campaign verify    --campaign-dir DİZİN
 hgs2-lab dataset build      --campaign-dir DİZİN --output DOSYA [--split-seed N] [--ratios 0.6,0.2,0.2]
                             [--invalid-policy exclude|fail]
 hgs2-lab dataset features   --campaign-dir DİZİN --dataset DOSYA --output-dir DİZİN [--policy observed-v1]
+hgs2-lab detect robust-z    --features-dir DİZİN --output DOSYA
 ```
 
 * `validate`: yapılandırma ve senaryoları doğrular, çözülen yolları ve hedefin `run` için izinli olup olmadığını
@@ -147,7 +155,8 @@ hgs2-lab dataset features   --campaign-dir DİZİN --dataset DOSYA --output-dir 
 * `list`: senaryoları listeler. İstek göndermez.
 * `run`: ön kontrolden sonra senaryoları sırayla çalıştırır, sonuçları ve metadata'yı kaydeder, bir özet yazdırır
   (istek sayıları, HTTP/taşıma hatası sayıları, ölçüm isteklerinin `duration_ms` medyan/en az/en çok değeri,
-  sonuç dosyalarının yolu). `--target-label` metadata'ya `target_label` olarak yazılır.
+  sonuç dosyalarının yolu). `--target-label` metadata'ya `target_label` olarak yazılır. `--telemetry` (`run` ve
+  `synthetic run`): sistem telemetrisini ayrı bir dosyaya yazar; bkz. "Sistem telemetrisi (F4)".
 * `analyze`: kaydedilmiş bir çalıştırmanın CSV ve JSON dosyalarını okur, doğrular ve analiz dosyası yazar. **İstek
   göndermez, ağa erişmez.** Ayrıntılar: "Analiz (`analyze`)".
 * `synthetic validate` / `synthetic plan`: sentetik deney manifestini doğrular, deterministik planın özetini ve
@@ -964,17 +973,38 @@ tanımlayıcıdır, ancak `offset_ms` F3-D'nin `observed-v1` politikasında "gö
 aşamada değiştirilmedi; protokol konum alanlarını (`seq`, `iteration`, `offset_ms`) dedektör girdisi olarak **yasaklar**
 ve yalnızca sıralama/gecikme hesabı için kullanır. Öneri: `offset_ms`'i "sıralama" rolüne alan yeni bir politika sürümü.
 
-### Değerlendirme protokolü (uygulanmadı)
+### Değerlendirme protokolü (F5'te yalnızca Robust Z-score uygulandı)
 
 **Etiketler** plandan türetilebilir: istek düzeyinde anormal = `planned_fault ≠ none` (yalnızca `label_status =
-confirmed`, ısınma hariç). Olay (epizot) = bir çalıştırmada aynı senaryonun ardışık anormal istekleri; başlangıcı ilk
-anormal `seq`. Bu tasarımda her anomali senaryosunda tam bir epizot vardır. Belirsiz olan tek nokta "anomalinin
+confirmed`, ısınma hariç). **Gecikme anomalisi epizodu:** aynı çalıştırmada aynı senaryoya ait, `seq` sırasıyla ardışık
+ve planda `fixed_delay`/`random_delay` taşıyan ölçüm istekleri. Başlangıcı ilk böyle istektir. Senaryonun gecikme
+anomalisi dizisi bitince, yani senaryoda gecikme olmayan ilk istekte veya senaryo sonunda, epizot da biter. HTTP
+hatası, bağlantı kopması ve timeout planlı istekler gecikme epizoduna girmez ve onu bitirir (bkz. F5). Bu tasarımda
+her gecikme senaryosunda tam bir epizot vardır. Belirsiz olan tek nokta "anomalinin
 büyüklüğü"dür: 5 ms'lik planlı gecikme de anormal sayılır; tespit edilebilirlik planlı büyüklüğe göre raporlanmalıdır.
 
 **Görev ayrımı:** HTTP ve taşıma hataları istemcide doğrudan gözlenir (`success=false`, `error_type`); bunları "tespit
 etmek" totolojidir ve dedektör başarısına katılmaz, ayrı sayılır. Baseline yöntemleri **gecikme anomalisi** görevinde
-değerlendirilir: seri = bir çalıştırmanın `success=true` ölçüm istekleri, `seq` sırasıyla; girdi yalnızca
-`log(duration_ms)`; pozitif sınıf `planned_fault ∈ {fixed_delay, random_delay}`. Her çalıştırmada durum sıfırlanır.
+değerlendirilir: seri (skorlanan girdi) = bir çalıştırmanın `success=true` ölçüm istekleri, `seq` sırasıyla. Epizot
+sınırları ise plana göre tüm ölçüm istekleri üzerinden belirlenir; başarısız gecikme planlı istekler epizotta kalır
+ama skorlanmaz. Girdi yalnızca `log(duration_ms)`; pozitif sınıf `planned_fault ∈ {fixed_delay, random_delay}`.
+Her çalıştırmada durum sıfırlanır.
+
+**Dedektör girdi politikası (ilk dedektör; bağlayıcı):**
+
+* **İzinli tek tahmin girdisi:** `duration_ms`; uygulanan ilk ve tek dönüşüm `log(duration_ms)`.
+* **Tahmin girdisi olarak yasak:** `seq`, `iteration`, `offset_ms` (konum sızıntısı, yukarıda); `planned_fault`,
+  `expected_outcome`, `hold_ms_actual`, `label_status` ve `labels.csv`'deki diğer tüm etiket/tasarım sütunları
+  (`scenario`, `planned_status`, `planned_delay_ms`); tanımlayıcılar (`run_id`, `campaign_id`, `group_id`, `plan_id`,
+  `seed`, `split`); sunucu olay dosyaları; F4 telemetrisi.
+* `seq`, `iteration` ve `offset_ms` yalnızca **sıralama, hizalama ve değerlendirme** (seri sırası, epizot başlangıcı,
+  tespit gecikmesi) için kullanılabilir. `planned_fault` yalnızca değerlendirme etiketidir ve kalibrasyonda normal
+  satırların seçimi için kullanılır.
+* `observed-v1` politikası bilinçli olarak değiştirilmedi; `feature-manifest.json` `offset_ms`'i hâlâ
+  `observed_feature` olarak işaretler ve `not_for_features` listesine almaz. Bu protokol o role göre önceliklidir:
+  dedektör kodu sütunu manifest rolünden değil yukarıdaki listeden seçmelidir. `elapsed_ms`, `status_code`, `success`,
+  `error_type`, `response_bytes` gözlem olsa da ilk dedektörün girdisi değildir (`success` yalnızca seriyi
+  `success=true` isteklere süzmek için kullanılır).
 
 **Veri kullanımı:** kalibrasyon (referans dağılım) yalnızca train bölümündeki normal satırlardan (`planned_fault = none`);
 parametre seçimi yalnızca validation'da, önceden ilan edilen ızgaralardan; test bir kez, en sonda. Test hiçbir aşamada
@@ -982,16 +1012,263 @@ kalibrasyona girmez.
 
 | Yöntem | Tanım | Sabitler / seçim |
 |---|---|---|
-| Robust Z-score | `z = 0.6745·(x − medyan)/MAD`, x = log(duration_ms); medyan ve MAD train normal satırlarından | Eşik `z > 3,5` (tek yönlü, önceden sabit); MAD = 0 ise hata (sessiz geri dönüş yok) |
+| Robust Z-score | `z = 0.6745·(x − medyan)/MAD`, x = log(duration_ms); medyan ve MAD train normal satırlarından | Eşik `z > 3,5` (tek yönlü, önceden sabit); MAD = 0 ise `degenerate_baseline`: skor ve alarm üretilmez (sessiz geri dönüş yok; bkz. F5) |
 | EWMA | `E_t = λ·x_t + (1−λ)·E_{t−1}`, `E_0` = train normal medyanı; `UCL = μ0 + L·σ·sqrt(λ/(2−λ))`, σ = 1,4826·MAD | λ ∈ {0,1; 0,2; 0,3}, L = 3; λ validation'da "yanlış alarm oranı ≤ %1 koşuluyla en yüksek recall" ile seçilir |
 | CUSUM | `S_t = max(0, S_{t−1} + z_t − k)`, z_t standartlaştırılmış log-gecikme (train normal medyan/σ) | k = 0,5; h ∈ {4, 5, 8}, validation'da aynı ölçütle; ilk alarm epizot için sayılır |
 
 **Ölçütler (her yöntem için):** istek düzeyinde precision, recall, false-positive rate (normal satırlarda alarm /
-normal satır); epizot düzeyinde tespit oranı; **tespit gecikmesi** = epizot başlangıcından sonraki ilk alarmın `seq`
-farkı (istek sayısı) ve `offset_ms` farkı (ms) — epizot öncesi alarmlar yanlış alarmdır; yalnızca normal gruplarda
+normal satır); epizot düzeyinde tespit oranı; **istek cinsinden tespit gecikmesi** = ilk alarmın `seq`'i − epizot
+başlangıç `seq`'i. Wall-clock tespit gecikmesi için alarm üretim zamanı gerekir; bu zaman kaydedilmez, bu yüzden
+hesaplanmaz (bkz. F5). Epizot dışındaki alarmlar yanlış alarmdır. Ayrıca yalnızca normal gruplarda
 çalıştırma başına yanlış alarm sayısı; plan ve hata ailesi bazında ayrı tablolar; seed'ler arası değişkenlik (plan
 başına 3 seed için aralık); belirsizlik için grup düzeyinde (bağımsız birim) bootstrap. Bir bölümde bulunmayan aileler
 için sonuç "değerlendirilemedi" olarak raporlanır, sıfır olarak değil.
+
+### F3-E kapanış kontrolü (2026-10-24)
+
+**Karar: sınırlamalarla tamamlandı.** Yeni veri üretilmedi; mevcut kampanya, veri seti ve özellik dosyaları salt okunur
+denetlendi (denetim öncesi ve sonrası 254 dosyanın SHA-256 özetleri aynı).
+
+* **Bütünlük:** kampanya manifesti `configs/campaign.baseline.example.json` ile bayt bayt aynı; `campaign verify` 0 sorun,
+  180 dosya kaydının özeti tutuyor; sayımlar planlanan = kaydedilen = sonuç satırı = etiket kaydı = `confirmed` = 1488
+  (108 ısınma + 1380 ölçüm). Veri seti kayıtlı parametrelerle bellekte birebir yeniden üretildi; `features.csv` ve
+  `labels.csv` bellekte yeniden üretilenle bayt bayt aynı (1380 satır, ısınma satırı yok); özetler F3-E raporundakilerle
+  aynı (`campaign.json` `1c5f59c2…cda6a`, veri seti `41b2f0b9…4964f`, `features.csv` `4b923e5b…391f2`, `labels.csv`
+  `04d77dd0…7c38`). 12 grup ve 36 çalıştırmanın her biri tek bölümde; seed tekrarları ve özdeş tasarımlar bölümler arasında
+  paylaşılmıyor.
+* **Sınıf kapsamı (açık kısıt):** test bölümünde yalnızca `none` 180 ve `random_delay` 60 ölçüm (tek grup:
+  `random-narrow`) var. `fixed_delay` yalnızca validation'da, `http_error` ve `connection_drop` yalnızca train'de.
+  Nadir aileler toplamda `connection_drop` 9 (train, tek grup) ve `timeout` 9 (train 6 + validation 3). Gecikme görevi
+  için pozitif / normal ölçüm: train 90 / 585, validation 150 / 177, test 60 / 180. Test sonucu yalnızca `random_delay`
+  (2–10 ms) için anlamlıdır; diğer aileler için "değerlendirilemedi" raporlanmalıdır.
+* **Tekrarlanamayan entegrasyon hatası (açık kısıt):** F3-E sırasında entegrasyon paketinin bir çalıştırması
+  `1 failed, 88 passed, 700 deselected` verdi. Çıktı yalnızca özet satırına kısaltıldığı için test adı, traceback ve hata
+  türü **kaydedilmedi ve geri kazanılamaz**. Sonrasında 27 tam entegrasyon turu (89/89), şüpheli 8 zamanlama/eşzamanlılık
+  testinin 40 turu ve 2026-10-24 kapanış turu (`pytest -m integration -rfE --tb=long`: 90/90, F4 testi dahil) başarılı.
+  Hata çözülmüş sayılmaz; kararsız bir test olabilir. Bundan sonra entegrasyon çalıştırmaları `-rfE` ile ve tam çıktı
+  saklanarak yapılmalıdır.
+
+## Sistem telemetrisi (F4)
+
+Amaç: ileride gecikme anomalilerini sistem kaynaklarıyla ilişkilendirebilmek için çalıştırma sırasında **zaman damgalı**
+CPU, bellek, disk ve ağ (TCP) sayaçlarını toplamak. Bu aşamada telemetri **yalnızca toplanır**: `analyze`, `dataset`,
+`dataset features` ve (henüz olmayan) anomali dedektörü onu okumaz; `observed-v1` politikası değişmedi. Yeni bağımlılık
+yoktur (Windows sayaçları standart kütüphanedeki `ctypes` ile salt okunur; yönetici yetkisi gerekmez).
+
+```
+hgs2-lab synthetic run --manifest configs/synthetic.example.json --results-dir results --run-id syn-demo-2 --telemetry
+hgs2-lab run --config configs/config.json --telemetry --telemetry-interval-ms 500
+```
+
+`--telemetry` verilmezse davranış ve tüm dosyalar öncekiyle aynıdır (telemetri dizini bile oluşmaz). Aralık 100–60 000
+ms (varsayılan 250); geçersiz değer veya `--telemetry` olmadan `--telemetry-interval-ms` kullanım hatasıdır (çıkış 2).
+`campaign run` telemetri toplamaz.
+
+### Toplanan metrikler ve kapsam
+
+`system` = makine geneli (deneyle ilgisiz tüm süreçler dahil); `process` = yalnızca bu Python süreci: istemci,
+`synthetic run`'da **aynı süreçteki sentetik sunucu** ve örnekleyici iş parçacığı birlikte.
+
+| Grup | Kapsam | Kaynak (Windows) | Alanlar | Not |
+|---|---|---|---|---|
+| `cpu_system` | system | `GetSystemTimes` | `idle_s`, `kernel_s`, `user_s` (sayaç, s) | Tüm mantıksal CPU'ların toplamı; `kernel_s` boşta süreyi **içerir** |
+| `cpu_process` | process | `os.times` + `QueryProcessCycleTime` | `user_s`, `system_s` (s), `cycles` (sayaç) | `cycles` gerçek işlemci çevrimi; süreye çevrilmez |
+| `memory_system` | system | `GlobalMemoryStatusEx` | `memory_load_percent`, `total_phys_bytes`, `avail_phys_bytes`, `commit_limit_bytes`, `commit_avail_bytes` (anlık) | |
+| `memory_process` | process | `K32GetProcessMemoryInfo` | `working_set_bytes`, `peak_working_set_bytes`, `private_bytes` (anlık), `page_faults` (sayaç) | |
+| `disk_system` | system | `IOCTL_DISK_PERFORMANCE` (`\\.\PhysicalDriveN`) | `drives`, `read/write_bytes`, `read/write_count`, `read/write/idle_time_s` (sayaç), `queue_depth` (anlık) | Başlangıçta bulunan fiziksel disklerin toplamı; bir disk okunamazsa grup null (kısmi toplam yok) |
+| `io_process` | process | `GetProcessIoCounters` | `read/write/other_ops`, `read/write/other_bytes` (sayaç) | Dosya, aygıt **ve soket** G/Ç'si (loopback HTTP trafiği `other_*`'da görünür); disk G/Ç'si değildir |
+| `net_tcp_system` | system | `GetTcpStatisticsEx2` (IPv4 + IPv6) | `active/passive_opens`, `attempt_fails`, `estab_resets`, `in/out_segs`, `retrans_segs`, `in_errs`, `out_rsts` (sayaç), `curr_estab`, `num_conns` (anlık) | **Loopback dahil**; segment sayısı, bayt değil |
+
+Sayaçların mutlak değeri anlamsızdır; yalnızca aynı dosyadaki örnekler arası farklar anlamlıdır. Her örnekte önceki
+örnekten türetilen `derived`: `interval_ms`, `system_cpu_busy_ratio` = (Δkernel + Δuser − Δidle) / (Δkernel + Δuser) ve
+`process_cpu_ratio` = (Δuser + Δsystem) / (aralık × mantıksal CPU sayısı); gerekli değer yoksa `null`.
+
+**Değerlendirilip alınmayan:** ağ arabirimi bayt sayaçları (`GetIfTable2`/`GetIfEntry2`). Bu makinede 52 MB'lık bir
+loopback aktarımı loopback arabiriminin sayaçlarını hiç değiştirmedi (Windows loopback trafiği arabirim sayaçlarına
+yansımaz) ve okuma örnek başına 0,7 ms (`GetIfEntry2`, 2 donanım arabirimi) ile 5,5 ms (`GetIfTable2`, 57 satır) sürdü.
+Buna karşılık 20 loopback bağlantısı `GetTcpStatisticsEx2`'de `active_opens` +20 ve ~640 segment olarak göründü
+(okuma ~4 µs). Bu yüzden ağ için TCP istatistikleri seçildi.
+
+### Ölçüm sıklığı ve zaman damgaları
+
+* `start()` (ilk istekten hemen önce) ve `stop()` (son istekten sonra) anlarında birer örnek; arada arka plan iş
+  parçacığı `başlangıç + k × aralık` son tarihlerinde örnek alır (kayma birikmez). Geç kalınan aralıklar telafi
+  edilmez, `missed_slots` olarak sayılır. `threading.Event.wait` erken dönerse son tarihe kadar yeniden beklenir: örnek
+  planlanan andan önce alınmaz. En çok 20 000 örnek; fazlası `dropped_samples` (bitiş örneği korunur).
+* Her örnek: `monotonic_ns` (`time.perf_counter_ns`, saat çapasıyla aynı saat; grupların okunmasından hemen önce),
+  `offset_ms` (sonuç metadata'sındaki `clock.monotonic_ns`'e göre; ilk istekten önceki örnekte negatif; çapa yoksa veya
+  başka bir saatse `null`), `wall_time_ns`/`wall_time_utc`, `collect_ns` (tüm grupların okunma süresi), `lag_ns`
+  (planlanan son tarihe göre gecikme; yalnızca periyodik örneklerde), `values` ve `errors`.
+* Böylece bir isteğin `offset_ms` değeri telemetri örnekleriyle aynı eksene yerleşir. Bu hizalama yalnızca aynı süreç
+  için geçerlidir (bkz. "Saat çapası").
+* **Hata politikası:** okunamayan grup için değer uydurulmaz; değer `null`, hata metni `errors`'ta, sayısı
+  `summary.probe_errors`'ta. Platformda olmayan grup `metrics.<grup>.available = false` ve `reason` ile işaretlenir ve
+  yeniden denenmez. Hiçbir telemetri hatası çalıştırmayı durdurmaz veya çıkış kodunu değiştirmez.
+
+### Telemetri dosyası
+
+* `<sonuç dizini>/telemetry/<run_id>.telemetry.json`; kısmi çalıştırmada `<run_id>.partial.telemetry.json`.
+  Sonuçlardan **sonra** yazılır ve `result_files` ile sonuç dosyalarının adını ve SHA-256 özetini taşır.
+* Üzerine yazılmaz: dosya varsa `--telemetry` ile çalıştırma ön kontrolde reddedilir (çıkış 3, istek yok). Dosya
+  yazılamazsa sonuçlar korunur ve stderr'e uyarı yazılır.
+* `format: "hgs2-lab-telemetry"`, `telemetry_schema_version: 1` (alan eklemek sürüm değiştirmez). Ayrıca `metrics`
+  (grup başına kapsam, kaynak, alan birimi/türü, kullanılabilirlik), `sampling`, `clock`, `process_model`,
+  `derived_fields`, `caveats` ve `summary` (örnek sayısı, toplama maliyeti min/medyan/en çok/toplam, gecikme, atlanan ve
+  düşürülen örnekler, örnekleyici iş parçacığının CPU süresi, temiz kapanış).
+* **Şema uyumluluğu:** sonuç dosyaları (şema v2) değişmez; metadata'ya yeni anahtar eklenmedi. Telemetrili ve
+  telemetrisiz çalıştırmanın CSV/JSON dosyaları bayt bayt aynıdır (birim testi). `reader`/`analyze`, etiket dosyaları ve
+  kampanya kataloğu telemetri dizinini okumaz.
+
+### Ölçüm maliyeti (bu makine: Windows 11, Python 3.15.0, 64 bit)
+
+| Ölçüm | Değer |
+|---|---|
+| Grup başına okuma | `GetSystemTimes` ~8–27 µs, `GlobalMemoryStatusEx` ~2 µs, `K32GetProcessMemoryInfo` ~3 µs, `GetProcessIoCounters` ~3 µs, disk başına `DeviceIoControl` ~10 µs, `GetTcpStatisticsEx2` ~4 µs/aile, `os.times` < 1 µs |
+| Tam örnek (`collect_ns`), boşta | medyan ~0,4–0,6 ms |
+| `synthetic run` (örnek manifest, 55 istek, ~2,2 sn) | 250 ms: 10 örnek, toplama medyan 0,58 / en çok 0,68 ms, gecikme medyanı 8,3 ms, dosya 31 KB; 100 ms: 24 örnek, 0,48 / 0,77 ms, 59 KB |
+| Ana iş parçacığı CPU-yoğunken | GIL'i bırakan çağrılarla (`WinDLL`) toplama medyanı ~46 ms (her çağrı dönüşü GIL'i bekler); GIL bırakılmadan (`PyDLL`, 64 bit) ~0,33 ms. Gecikme (`lag`) yine ~20–25 ms |
+
+Bu yüzden 64 bit'te sayaçlar GIL bırakılmadan okunur (çağrılar mikrosaniyelik ve bloklamaz). Bir örnek <1 ms boyunca
+diğer iş parçacıklarını bekletir; `[monotonic_ns, monotonic_ns + collect_ns]` aralığına denk gelen istekler bu kadar
+etkilenebilir. Telemetrinin istemci sürelerine etkisi sistematik olarak ölçülmedi.
+
+### Platform kısıtlamaları ve bilinen sınırlamalar
+
+* Yalnızca Windows'ta (64 bit, Python 3.15.0) çalıştırıldı ve sınandı. Diğer platformlarda yalnızca `cpu_process`
+  (`os.times`) toplanır; diğer gruplar "desteklenmeyen platform" nedeniyle `available: false` olur (Linux `/proc`
+  okuyucuları uygulanmadı). 32 bit Windows yolu (`WinDLL`) sınanmadı.
+* Örnekleyici istemciyle (ve sentetik sunucuyla) aynı süreçte ve aynı GIL'dedir. `process` metrikleri istemci + sunucu +
+  örnekleyicinin toplamıdır; sunucu servis süresi veya sunucunun kaynak kullanımı olarak **yorumlanmamalıdır**.
+* CPU sayaçları saat adımıyla (~15,6 ms) güncellenir: kısa aralıklarda oranlar kabadır (oranlar için ≥ 250 ms önerilir).
+  `cpu_process` süreleri de bu çözünürlüktedir; örnekleyici iş parçacığının CPU süresi çoğu zaman 0 görünür.
+* `lag_ns`: `Event.wait` Windows'ta zamanlayıcı adımıyla uyanır; ölçülen medyan ~5–8 ms, CPU-yoğun bir iş parçacığı
+  varken ~20–25 ms. Değer her örnekte kaydedilir.
+* `net_tcp_system` makine genelidir (diğer süreçlerin bağlantıları dahil), IPv4 ve IPv6 toplanır, bayt değil segment
+  sayar; `in_segs`/`out_segs` dışındaki sayaçlar 32 bittir ve taşabilir. Arabirim bayt sayaçları toplanmaz.
+* `disk_system` yalnızca başlangıçta bulunan fiziksel diskleri (en çok 16) izler; disk performans sayaçları kapalıysa
+  grup `available: false` olur.
+* Sentetik deneyde `process` ve `net_tcp_system` değerleri enjekte edilen hatayı yansıtabilir (ör. `connection_drop`
+  yeni TCP bağlantısı açtırır); bağımsız bir sinyal değildir. İleride özellik olarak kullanılmadan önce sızıntı
+  açısından ayrıca değerlendirilmelidir.
+* Örnekler bellekte tutulur ve çalıştırma sonunda yazılır; süreç zorla sonlandırılırsa telemetri kaybolur.
+
+## Robust Z-score gecikme dedektörü (F5)
+
+**Amaç:** ilk istatistiksel **gecikme anomalisi** dedektörü; yukarıdaki "Değerlendirme protokolü"nü uygular. EWMA ve
+CUSUM uygulanmadı. Veri sentetiktir; sonuçlar ölçüm ve değerlendirme hattını sınar, HGS2 hakkında bilgi vermez.
+
+```
+hgs2-lab detect robust-z --features-dir work/camp-baseline-001.features --output work/robust-z.evaluation.json
+```
+
+Girdi `dataset features` çıktı dizinidir ve yalnızca okunur: manifestin kendi özeti, `features.csv`/`labels.csv`
+SHA-256 özetleri, politika tanımı, başlıklar, satır anahtarları ve "bir çalıştırma tek bölümde" kuralı doğrulanır.
+Çıktı tek JSON dosyasıdır ve üzerine yazılmaz. Çıkış kodları: 0 yazıldı (dejenere baseline'da da; stderr uyarısı),
+1 tablo doğrulama/kalibrasyon hatası, 5 çıktı var veya yazılamadı. Komutun parametresi yoktur: eşik ve sabitler
+değerlendirmeden önce sabittir, sonuçlara göre ayarlanamaz.
+
+### Algoritma
+
+| Adım | Tanım |
+|---|---|
+| Girdi | Yalnızca `duration_ms` (`robust_z.INPUT_FIELDS`, açık izin listesi) |
+| Dönüşüm | `x = ln(duration_ms)`; `duration_ms` pozitif ve sonlu olmalı |
+| Kalibrasyon | `median = median(x)`, `MAD = median(|x − median|)` |
+| Skor | `z = 0,6745 · (x − median) / MAD` |
+| Karar | `alarm = z > 3,5`; yalnızca üst kuyruk, düşük gecikme anomali değildir |
+| Geçersiz değer | null, sayı olmayan, NaN, ±inf, ≤ 0. Kalibrasyon kümesinde varsa **hata** (sessizce dışlanmaz). Skorlamada `status = invalid_input`: normal sayılmaz, metriklere girmez, ayrıca sayılır |
+| MAD = 0 | Sıfıra bölünmez, MAD uydurulmaz: `baseline.status = degenerate_baseline`, hiçbir satır skorlanmaz (`z = alarm = null`, `status = degenerate_baseline`), tüm oranlar null; uyarı yazılır |
+
+Çıktıda ayrıca eşiğin süre karşılığı (`alarm_threshold_duration_ms` = `exp(median + 3,5·MAD/0,6745)`) bulunur.
+Bu değer yalnızca yorum içindir; karar `z` ile verilir.
+
+### Dedektör girdi politikası ve kalibrasyon verisi
+
+* `robust_z.py` tablo, etiket veya sıra görmez; yalnızca sayı listesi alır. Satırdan girdiye geçiş tek noktadadır
+  (`detection.detector_input`) ve yalnızca `duration_ms` döner. Manifestteki sütun rolleri (ör. `offset_ms` =
+  `observed_feature`) girdi seçiminde **kullanılmaz**.
+* **Kalibrasyon:** yalnızca `split = train`, `planned_fault = none`, `label_status = confirmed`, `success = true`
+  satırları. Isınma satırları özellik tablosunda yoktur. Validation ve test hiçbir parametreye girmez.
+* `seq`, `offset_ms`, `run_id`, `scenario`, `plan_id` ve etiketler yalnızca satır seçimi, epizot sınırları ve
+  değerlendirme için kullanılır. Testler, `iteration`/`offset_ms`/tasarım alanları ve değerlendirme etiketleri
+  değiştirildiğinde skorların birebir aynı kaldığını sınar.
+* İki değerlendirme kapsamı birbirinden ayrıdır:
+  1. **Gecikme anomalisi tespiti:** `label_status = confirmed`, `success = true`, geçerli `duration_ms` ve
+     `planned_fault ∈ {none, fixed_delay, random_delay}` olan satırlar. Pozitif sınıf `fixed_delay` veya `random_delay`.
+     Dedektörün başarısı yalnızca bu satırlarla ölçülür.
+  2. **Operasyonel hata sayımı (`operational_failures`):** `success = false` olan tüm satırlar (HTTP hatası, bağlantı
+     hatası, timeout). Planlanan hataya (`by_planned_fault`) ve gözlenen sonuca (`by_observed_outcome`: `error_type`
+     veya `http_<durum>`) göre sayılır. Bu satırlar dedektöre verilmez, normal sınıfa eklenmez ve hiçbir gecikme
+     metriğine girmez. Gecikme planlı olup başarısız olan istekler `latency_planned_rows_failed` ile ayrıca sayılır.
+     Bu istekler epizot sınırlarında yer alır (plan) ama skorlanmaz (`unsuccessful_rows`).
+* **Recall paydası** (TP + FN): yalnızca skorlanan, yani başarılı ve geçerli `duration_ms`'li gecikme planlı satırlar.
+  Başarısız gecikme planlı satırlar bu paydaya girmez; `latency_planned_rows_failed` her raporda bu yüzden kontrol
+  edilmelidir. Gecikme planlı isteklerin çoğu zaman aşımına uğrarsa recall olduğundan iyi görünebilir.
+
+### Değerlendirme metrikleri (bölüm başına; tanımlar çıktıda `metric_definitions`)
+
+| Metrik | Tanım ve payda |
+|---|---|
+| precision | TP / (TP + FP); alarm yoksa null (`no_alarms`) |
+| recall | TP / (TP + FN); pozitif satır yoksa null (`no_positive_rows`) |
+| FPR | FP / (FP + TN): skorlanan normal satırlarda alarm oranı; normal satır yoksa null |
+| Normal yanlış alarm | FP sayısı ve oranı; ayrıca tüm satırları `none` olan çalıştırmalarda çalıştırma başına yanlış alarm |
+| Epizot tespit oranı | Tespit edilen / değerlendirilebilir gecikme epizodu (tanım: protokol). Bir epizot en çok bir kez sayılır; esas alınan, epizot içindeki skorlanan satırlardaki **ilk** alarmdır. Tespit edilmeyen epizotlar paydada kalır. Hiç skorlanan satırı olmayan epizot (ör. tüm istekleri başarısız) gecikme dedektörüyle değerlendirilemez; paydaya girmez ve `episodes − evaluable` farkı olarak görünür. Epizot dışındaki alarmlar yanlış alarmdır |
+| Request Detection Delay (`request_detection_delay`) | İlk alarmı üreten isteğin `seq`'i − epizot başlangıç isteğinin `seq`'i; istek sayısıdır. 0, alarmın epizodun ilk isteğine ait olduğunu gösterir; 0 ms demek **değildir** |
+| Wall-clock Detection Delay (`wall_clock_detection_delay_ms`) | Epizot başlangıcından alarmın gerçekten üretildiği ana kadar geçen süre. **Hesaplanmaz:** `value = null`, `status = not_available` |
+| `start_to_alarm_request_offset_ms` | Alarmı üreten istek ile epizot başlangıç isteğinin `offset_ms` farkı, yani iki isteğin **başlangıçları** arasındaki süre. Alarm gecikmesi değildir: alarmı üreten isteğin kendi süresini ve skorlama zamanını içermez |
+
+**Neden wall-clock gecikmesi yok:** kayıtlı zamanlar istek başlangıcı (`offset_ms`, `started_at`), `elapsed_ms` ve
+`duration_ms`'tir. Dedektör kayıtlı veriyi çalıştırma bittikten sonra, çevrimdışı skorlar; alarmın üretildiği an
+hiçbir yerde kaydedilmez. İsteğin bitişi (`offset_ms + elapsed_ms`) yalnızca alarmın en erken üretilebileceği anı
+verir; gerçek alarm zamanı değildir ve bu değer de metrik olarak hesaplanmaz. Wall-clock gecikmesi için ileride şu
+gereklidir: çalıştırma sırasında skorlama yapılması ve alarm anının, epizot başlangıcıyla aynı monotonik zaman
+tabanında (saat çapası) kaydedilmesi. Bu altyapı uygulanmadı.
+
+Her oran `{value, numerator, denominator, status}` biçimindedir; sıfır paydada `value = null`. Ayrıca aile ve plan
+bazında kırılımlar, temsil edilmeyen aileler (`coverage`) ve satır bazında tahminler (`predictions`: anahtar, `x`,
+`z`, `alarm`, durum; etiket içermez) yazılır. Kaynak izlenebilirliği: özellik manifestinin `content_sha256`'sı,
+CSV özetleri, `dataset_id`, kampanya ve bölme parametreleri. Aynı girdi → aynı `content_sha256`.
+
+### F3-E veri setinde sonuç (2026-10-24; tek çalıştırma, salt okunur girdi)
+
+Kalibrasyon: train'in 21 çalıştırmasından 585 normal satır; medyan 1,146 ms, MAD(ln) 0,2429, eşik karşılığı
+≈ 4,04 ms. Bölümler F3-E'deki gibidir; yeniden üretilmedi.
+
+| Bölüm | Skorlanan | TP / FP / TN / FN | Precision | Recall | FPR | Epizot | Request Detection Delay |
+|---|---|---|---|---|---|---|---|
+| train (örneklem içi) | 675 | 90 / 0 / 585 / 0 | 1,000 | 1,000 | 0,000 | 6/6 | hepsi 0 |
+| validation | 327 | 150 / 0 / 177 / 0 | 1,000 | 1,000 | 0,000 | 9/9 | hepsi 0 |
+| test | 240 | 59 / 0 / 180 / 1 | 1,000 | 0,983 | 0,000 | 3/3 | 0, 0, 1 istek |
+
+* Wall-clock tespit gecikmesi her bölümde `not_available`. Testte 1 isteklik gecikmeli epizotta
+  `start_to_alarm_request_offset_ms` 4,0 ms'dir; bu, iki isteğin başlangıçları arasındaki süredir, alarm gecikmesi
+  değildir.
+* Operasyonel hatalar (gecikme metriklerine dahil değil):
+  * train 135: planlanan `http_error` 120, `connection_drop` 9, `timeout` 6. Gözlenen HTTP 500/502/503 sırasıyla
+    45/15/60, `connection_error` 9, `timeout` 6.
+  * validation 3 (`timeout`), test 0.
+  * Gecikme planlı ama başarısız istek hiçbir bölümde yok (`latency_planned_rows_failed = 0`).
+* Testte kaçırılan tek satır: planlanan 2,04 ms gecikme, `duration_ms` 3,85 ms (eşik 4,04 ms; z = 3,36). Normal
+  çalıştırmalarda (train 3, test 3) yanlış alarm yok.
+* **Yorum ve sınırlar:** bu değerler kolay bir sentetik görevi yansıtır. Aynı süreçteki loopback sunucuda normal
+  yanıt ~1,1 ms, enjekte gecikmeler ise 2–80 ms'dir; eşik yaklaşık 4 ms'ye denk gelir. Test bölümünde yalnızca tek
+  grup (`random-narrow`, 2–10 ms), 3 çalıştırma, 3 epizot ve 60 pozitif satır vardır. `fixed_delay` testte, train'de
+  yoktur; `random_delay` validation'da yoktur. Bu ailelerin ilgili bölümdeki sonucu "değerlendirilemedi"dir. Güven
+  aralığı ve seed'ler arası değişkenlik hesaplanmadı. Gerçek sistemlerdeki gecikme dağılımları, kuyruklar ve küçük
+  gecikmeler için genellenemez.
+
+### Bilinen sınırlamalar
+
+* Tek sabit eşik ve tek baseline; eşik seçimi veya ROC analizi yoktur (protokol gereği).
+* Gözlemler bağımsız varsayılır; seri bağımlılığı, kayma ve mevsimsellik ele alınmaz.
+* Grup düzeyinde bootstrap ve seed değişkenliği protokolde tanımlıdır ama bu sürümde hesaplanmaz. Daha geniş bir test
+  kümesi (her gecikme ailesi için test grubu) yoktur.
+* Wall-clock tespit gecikmesi ölçülemez: dedektör çevrimdışıdır ve alarm zamanı kaydedilmez (yukarıda).
+* Değerlendirme çıktısı şeması `evaluation_schema_version = 2`. Önceki sürüm (1) `delay_requests`/`delay_ms`
+  alanlarını kullanıyordu ve `delay_ms` adıyla gerçek gecikme gibi görünüyordu. Sayısal sonuçlar iki sürümde aynıdır.
+* Dedektör özellik tablosunun kendi manifestini ve özetlerini doğrular. Kampanya kataloğunu yeniden doğrulamaz; bu,
+  tablo üretilirken `dataset features` tarafından yapılır.
 
 ## Testler
 
@@ -1029,6 +1306,19 @@ Analiz katmanı testleri (birim):
 * `tests/test_features.py`: CSV biçim kuralları (boş değer, bool, int, float, alıntılama, LF), sütun rolleri
   (`hold_ms_actual` ve diğer etiket/tasarım sütunlarının özellik dosyasında olmaması), veri seti manifestinin özet ve
   biçim denetimi, dolu çıktı dizininin hiçbir şey yazılmadan reddi, modülün ağ kodunu içe aktarmaması.
+* `tests/test_robust_z.py`: Robust Z-score — log uzayında medyan/MAD, büyük gecikmenin işaretlenmesi ve katı üst
+  kuyruk eşiği, düşük gecikmenin anomali sayılmaması, determinizm, MAD = 0 (`degenerate_baseline`), sıfır / negatif /
+  NaN / ±inf / null / sayı olmayan girdiler, yalnızca `duration_ms` izin listesi, konum/tasarım/etiket alanlarının
+  skorları değiştirmemesi, kalibrasyonun yalnızca train normal satırlarından yapılması, epizot tanımı, epizodun tek
+  kez sayılması, tespit edilmeyen epizodun paydada kalması, istek cinsinden gecikme, wall-clock gecikmesinin
+  uydurulmaması, başarısız isteklerin normal sınıfa ve recall paydasına girmeyip `operational_failures`'ta ayrı
+  sayılması, sıfır paydalı metrikler, tablo bütünlüğü, deterministik ve üzerine yazmayan çıktı, CLI, ağ kodu içe aktarmama.
+* `tests/test_telemetry.py`: telemetri örnek biçimi ve zaman damgaları, saat çapasına göre ofset, gerçek saatle periyodik
+  örnekleme (planlanan andan önce örnek yok), örnek sınırı, okuma hatası / kullanılamayan grup / beklenmeyen istisna /
+  eksik alanın değer uydurulmadan kaydı, türetilmiş CPU oranları, aralık doğrulaması, desteklenmeyen platform, Windows'ta
+  gerçek sayaçların salt okunur okunması, ağ kodu içe aktarmama, belgede etiket/konum alanı olmaması; `execute_run` ile
+  ayrı dosya ve **bayt bayt aynı** v2 sonuçları, kısmi/Ctrl+C çalıştırma, üzerine yazmama, telemetri hatasında sonuçların
+  korunması, okuyucu/analizin etkilenmemesi, CLI seçenekleri.
 * `tests/test_campaign_baseline.py`: baseline kampanya manifesti — 12 plan × 3 seed, benzersiz kimlikler, deterministik
   plan, seed tekrarlarının aynı grup ve tasarımda kalması, tüm hata türleri ve `onset_after`, her anomali planının
   normal bölümle başlaması, güvenlik sınırı tahmini, test bölümünün yapısal sınıf kapsamı sınırlılığı.
@@ -1050,6 +1340,12 @@ Analiz katmanı testleri (birim):
   çelişen deneylerin geçersiz raporlanması, hedef korumasının atlatılamaması, üzerine yazmama, zaman aşımı
   beklemeleri sonraki isteklerle çakıştığında istek–sunucu olayı eşleştirmesinin korunması, planlanan/gerçekleşen
   bekleme ve istemci süresinin ayrı kaydedilmesi (sonuç dosyasına sızmaması), beklenmeyen hatada sunucunun kapatılması.
+* `tests/test_robust_z_run.py`: gerçek yerel sunucuyla kampanya → veri seti → özellik tablosu → `detect robust-z`;
+  kalibrasyonun bağımsız yeniden hesapla eşleşmesi, skorların yalnızca `duration_ms`'ten gelmesi, HTTP hatalarının
+  dışarıda kalması, girdi dosyalarının değişmemesi.
+* `tests/test_telemetry_run.py`: `synthetic run --telemetry` uçtan uca; telemetri dosyası, sonuç dosyası özetleri, aynı
+  saat ekseninde isteklerin kapsanması, loopback bağlantılarının TCP sayaçlarında görünmesi, etiketlerin ve `analyze`'ın
+  telemetriden bağımsız kalması.
 * `tests/test_campaign_run.py`: gerçek yerel sunucuyla kampanya (geçerli ve güvenlik sınırıyla durdurulan deneyler),
   katalog özetlerinin dosyalarla eşleşmesi, bozuk/eksik dosya, güvensiz yol, özeti güncellenmiş ama tutarsız etiket ve
   değiştirilmiş kampanya manifestinin yakalanması, veri setinin determinizmi, grup/çalıştırma bütünlüğü, geçersiz deney
@@ -1072,9 +1368,10 @@ reddedilmesi beklenen değerler olarak kullanılır. Zamanlama testleri yalnızc
 
 * **Gerçek HGS2'ye karşı hiç çalıştırılmadı.** Loopback dışı hedef (ör. ayrı bir test sunucusu) desteği bilinçli olarak
   yoktur; eklenmesi ayrı, açık bir tasarım kararı gerektirir.
-* **Gerçek HGS2 performans verisi yoktur; anomali tespiti ve makine öğrenmesi modeli yoktur.** `analyze` yalnızca tek
-  bir çalıştırmanın betimleyici istatistiklerini üretir; çalıştırmalar arası karşılaştırma, telemetri ve rapor
-  üretimi yoktur.
+* **Gerçek HGS2 performans verisi yoktur; makine öğrenmesi modeli yoktur.** Tek dedektör sentetik veri üzerinde
+  değerlendirilen Robust Z-score'dur (bkz. F5). `analyze` yalnızca tek
+  bir çalıştırmanın betimleyici istatistiklerini üretir; çalıştırmalar arası karşılaştırma ve rapor üretimi yoktur.
+  Sistem telemetrisi (F4) yalnızca toplanır; analiz edilmez ve sonuçlarla birleştirilmez.
 * Eşzamanlı istekler, yük profilleri (sabit hız, kademeli artış) ve süreye dayalı testler yok; istekler tek iş
   parçacığında sırayla gönderilir. Bu yüzden `analyze`'ın throughput'u bu çalıştırmada gözlenen istek hızıdır
   (senaryo gecikmeleri dahil), sunucu kapasitesi değildir.

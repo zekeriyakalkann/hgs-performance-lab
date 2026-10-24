@@ -4,6 +4,7 @@ Komutlar:
 * validate: yapılandırma ve senaryoları doğrular (istek göndermez).
 * list:     senaryoları listeler (istek göndermez).
 * run:      senaryoları YALNIZCA loopback hedefe karşı çalıştırır ve sonuçları kaydeder.
+            `run` ve `synthetic run` için `--telemetry`: sistem telemetrisini ayrı dosyaya yazar (bkz. telemetry.py).
 * analyze:  kaydedilmiş bir çalıştırmanın CSV/JSON dosyalarını çevrimdışı analiz eder (istek göndermez).
 * synthetic validate|plan|run: uygulamanın kendi yerel sentetik sunucusuyla planlı hata deneyleri
   (gerçek HGS2 değildir; bkz. synthetic.py).
@@ -11,6 +12,8 @@ Komutlar:
 * dataset build: doğrulanmış bir kampanya kataloğundan train/validation/test veri seti manifesti (bkz. dataset.py).
 * dataset features: doğrulanmış veri setinden deterministik özellik tablosu; features.csv + labels.csv + manifest
   (bkz. features.py). 0 = yazıldı, 1 = doğrulama hatası, 5 = çıktı dizini boş değil / yazılamadı.
+* detect robust-z: özellik tablosundan Robust Z-score gecikme dedektörü; train normal satırlarıyla kalibrasyon,
+  bölüm bazında değerlendirme (bkz. detection.py). 0 = yazıldı, 1 = doğrulama/kalibrasyon hatası, 5 = çıktı var.
 
 campaign run: 0 = tüm deneyler geçerli, 6 = en az bir deney geçersiz/başarısız (katalogda nedenleriyle),
 3 = çıktı dizini boş değil (hiç deney çalışmadı), 130 = Ctrl+C. campaign verify: 0 = sorun yok, 1 = sorun var.
@@ -49,6 +52,7 @@ from .campaign import CampaignError, load_campaign, verify_campaign
 from .campaign_runner import CampaignRejected, run_campaign
 from .config import ConfigError, LabConfig, load_config
 from .dataset import INVALID_POLICIES, DatasetError, build_dataset_document, parse_ratios
+from .detection import DetectionError, write_evaluation
 from .features import FEATURE_POLICIES, OBSERVED_V1, FeatureTableError, write_feature_table
 from .execution import (
     STATUS_ABORTED,
@@ -61,6 +65,7 @@ from .execution import (
 )
 from .models import InvalidRunId
 from .reader import load_run
+from .robust_z import BASELINE_DEGENERATE, CalibrationError
 from .scenarios import Scenario, ScenarioError, load_scenarios
 from .storage import StorageError
 from .synthetic import (
@@ -73,6 +78,7 @@ from .synthetic import (
 from .synthetic_experiment import prepare as prepare_synthetic
 from .synthetic_experiment import run_synthetic_experiment
 from .target_guard import TargetNotAllowed, check_url
+from .telemetry import DEFAULT_INTERVAL_MS, TelemetryError, TelemetryRecorder, validate_interval_ms
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -84,6 +90,28 @@ EXIT_SYNTHETIC_INVALID = 6
 EXIT_INTERRUPTED = 130
 
 _EXIT_BY_STATUS = {STATUS_COMPLETED: EXIT_OK, STATUS_ABORTED: EXIT_ABORTED, STATUS_INTERRUPTED: EXIT_INTERRUPTED}
+
+
+def _interval_ms(text: str) -> int:
+    try:
+        return validate_interval_ms(int(text))
+    except (ValueError, TelemetryError) as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _add_telemetry_arguments(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--telemetry", action="store_true",
+                   help="Sistem telemetrisini (CPU, bellek, disk, TCP) ayrı dosyaya kaydet: "
+                        "<sonuç dizini>/telemetry/<run_id>[.partial].telemetry.json; sonuç dosyaları değişmez")
+    p.add_argument("--telemetry-interval-ms", type=_interval_ms,
+                   help=f"Telemetri örnekleme aralığı, ms (yalnızca --telemetry ile; varsayılan: {DEFAULT_INTERVAL_MS})")
+
+
+def _telemetry_recorder(args: argparse.Namespace) -> TelemetryRecorder | None:
+    if not args.telemetry:
+        return None
+    interval = args.telemetry_interval_ms if args.telemetry_interval_ms is not None else DEFAULT_INTERVAL_MS
+    return TelemetryRecorder(interval_ms=interval)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -103,6 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if name == "run":
             p.add_argument("--target-label", help="Hedef ortam etiketi; metadata'ya target_label olarak yazılır")
+            _add_telemetry_arguments(p)
 
     defaults = AnalysisParams()
     p = sub.add_parser("analyze", help="Kaydedilmiş bir çalıştırmayı çevrimdışı analiz et (istek göndermez)")
@@ -134,6 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "run":
             q.add_argument("--results-dir", required=True, help="Sonuç dizini (sonuçlar, etiketler, sunucu olayları)")
             q.add_argument("--run-id", help="run_id; verilmezse otomatik üretilir")
+            _add_telemetry_arguments(q)
 
     p = sub.add_parser("campaign", help="Toplu sentetik deney kampanyası ve katalog (gerçek HGS2 değildir)")
     campaign_sub = p.add_subparsers(dest="campaign_command", required=True)
@@ -160,6 +190,13 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--output-dir", required=True, help="Çıktı dizini (yoksa oluşturulur; varsa boş olmalı)")
     q.add_argument("--policy", choices=sorted(FEATURE_POLICIES), default=OBSERVED_V1.name,
                    help="Sütun rolleri politikası (varsayılan: %(default)s)")
+
+    p = sub.add_parser("detect", help="Gecikme anomalisi dedektörü (sentetik özellik tablosu üzerinde; ağ yok)")
+    detect_sub = p.add_subparsers(dest="detect_command", required=True)
+    q = detect_sub.add_parser("robust-z", help="Robust Z-score: train normal satırlarıyla kalibrasyon, sabit eşik "
+                                                "z > 3.5, bölüm bazında değerlendirme")
+    q.add_argument("--features-dir", required=True, help="`dataset features` çıktı dizini (salt okunur)")
+    q.add_argument("--output", required=True, help="Değerlendirme JSON dosyası (üzerine yazılmaz)")
     return parser
 
 
@@ -176,6 +213,22 @@ def _target_note(base_url: str) -> str:
     except TargetNotAllowed:
         return "loopback değil; run bu hedefi reddeder"
     return "loopback (run için izinli; çalıştırmada ad çözümlemesi de denetlenir)"
+
+
+def _print_telemetry(outcome: RunOutcome, telemetry: TelemetryRecorder | None) -> None:
+    if telemetry is None:
+        return
+    if outcome.telemetry_path is None:
+        print(f"UYARI: telemetri kaydedilemedi (sonuçlar etkilenmedi): {outcome.telemetry_error}", file=sys.stderr)
+        return
+    s = telemetry.summary()
+    collect = s["collect_ms"]
+    cost = f", toplama medyan {collect['median']:.2f} ms / en çok {collect['max']:.2f} ms" if collect else ""
+    unavailable = ", ".join(s["unavailable"]) or "yok"
+    errors = ", ".join(f"{k} {v}" for k, v in s["probe_errors"].items()) or "yok"
+    print(f"  telemetri: {outcome.telemetry_path}")
+    print(f"             örnek {s['samples']} (aralık {telemetry.interval_ms} ms, atlanan {s['missed_slots']}){cost}; "
+          f"okunamayan grup: {unavailable}; okuma hatası: {errors}")
 
 
 def _print_outcome(outcome: RunOutcome) -> None:
@@ -198,8 +251,10 @@ def _print_outcome(outcome: RunOutcome) -> None:
 
 def _run(args: argparse.Namespace, config: LabConfig, scenarios: list[Scenario]) -> int:
     try:
+        telemetry = _telemetry_recorder(args)
         outcome = execute_run(
-            config, scenarios, config_path=Path(args.config).resolve(), target_label=args.target_label
+            config, scenarios, config_path=Path(args.config).resolve(), target_label=args.target_label,
+            telemetry=telemetry,
         )
     except PreflightError as exc:
         print(f"Çalıştırma reddedildi, hiçbir istek gönderilmedi: {exc}", file=sys.stderr)
@@ -208,6 +263,7 @@ def _run(args: argparse.Namespace, config: LabConfig, scenarios: list[Scenario])
         print(f"Sonuçlar kaydedilemedi: {exc}", file=sys.stderr)
         return EXIT_STORAGE_ERROR
     _print_outcome(outcome)
+    _print_telemetry(outcome, telemetry)
     return _EXIT_BY_STATUS[outcome.status]
 
 
@@ -313,7 +369,9 @@ def _synthetic(args: argparse.Namespace) -> int:
 
 def _synthetic_run(args: argparse.Namespace) -> int:
     try:
-        result = run_synthetic_experiment(args.manifest, results_dir=Path(args.results_dir), run_id=args.run_id)
+        telemetry = _telemetry_recorder(args)
+        result = run_synthetic_experiment(args.manifest, results_dir=Path(args.results_dir), run_id=args.run_id,
+                                          telemetry=telemetry)
     except ManifestError as exc:
         print(f"Manifest geçersiz: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -325,6 +383,7 @@ def _synthetic_run(args: argparse.Namespace) -> int:
         return EXIT_STORAGE_ERROR
 
     _print_outcome(result.run)
+    _print_telemetry(result.run, telemetry)
     labels = result.labels
     summary = labels["summary"]
     print(f"Sentetik deney: {labels['experiment']['experiment_id']}  (dataset_kind: synthetic; gerçek HGS2 ölçümü değildir)")
@@ -419,6 +478,45 @@ def _dataset_features(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _fmt_ratio(entry: dict) -> str:
+    return f"{entry['value']:.3f} ({entry['numerator']}/{entry['denominator']})" if entry["value"] is not None         else f"tanımsız ({entry['status']})"
+
+
+def _detect(args: argparse.Namespace) -> int:
+    if Path(args.output).exists():
+        print(f"Değerlendirme dosyası zaten var, üzerine yazılmaz: {args.output}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    try:
+        document = write_evaluation(args.features_dir, args.output)
+    except (DetectionError, CalibrationError) as exc:
+        print(f"Dedektör çalıştırılamadı: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    except AnalysisOutputError as exc:
+        print(f"Değerlendirme kaydedilemedi: {exc}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    ev = document["evaluation"]
+    cal, base = ev["calibration"], ev["calibration"]["baseline"]
+    print(f"Robust Z-score ({ev['detector']['version']}): girdi {ev['detector']['input_fields']}, eşik z > "
+          f"{ev['detector']['threshold']}  content_sha256={document['content_sha256']}")
+    print(f"  kalibrasyon (train normal): n={base['n']}, medyan {base['median_duration_ms']:.3f} ms, "
+          f"MAD(ln) {base['mad_log']:.4f}, durum {base['status']}")
+    if base["status"] == BASELINE_DEGENERATE:
+        print(f"UYARI: {cal['warning']}", file=sys.stderr)
+    for split, s in ev["splits"].items():
+        rl, ep = s["request_level"], s["episodes"]
+        delay = ep["request_detection_delay"]
+        print(f"  {split:10s} skorlanan {s['scored_rows']}: precision {_fmt_ratio(rl['precision'])}, recall "
+              f"{_fmt_ratio(rl['recall'])}, FPR {_fmt_ratio(rl['false_positive_rate'])}; epizot "
+              f"{_fmt_ratio(ep['detection_rate'])}, istek cinsinden tespit gecikmesi medyanı "
+              + (f"{delay['median']}" if delay["median"] is not None else "yok")
+              + f"; operasyonel hata {s['operational_failures']['rows']} (gecikme metriklerine dahil değil)")
+    for item in ev["limitations"]:
+        if "temsil edilmeyen" in item or "test bölümündeki" in item:
+            print(f"  not: {item}")
+    print(f"  çıktı: {args.output}")
+    return EXIT_OK
+
+
 def _dataset(args: argparse.Namespace) -> int:
     if args.dataset_command == "features":
         return _dataset_features(args)
@@ -449,7 +547,10 @@ def _dataset(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if getattr(args, "telemetry_interval_ms", None) is not None and not args.telemetry:
+        parser.error("--telemetry-interval-ms yalnızca --telemetry ile kullanılabilir")
     if args.command == "analyze":  # senaryo dosyası gerekmez; ağ erişimi yok
         return _analyze(args)
     if args.command == "synthetic":
@@ -458,6 +559,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _campaign(args)
     if args.command == "dataset":
         return _dataset(args)
+    if args.command == "detect":
+        return _detect(args)
 
     try:
         config, scenarios = _load(args)
