@@ -67,6 +67,7 @@ Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `
 | `scenario_mapping.py` | Senaryo eşleme sözleşmesi (`scenario_mapping_version 1`): kararlı test tanımlayıcısı (`classname#name`) → senaryo kimliği; metadata ile birleşik çözümleme, çelişki ve belirsizlikte kimlik seçilmez (ağ yok) |
 | `expectations.py` | Beklenti sözleşmesi (`expectations_version 2`): sürümlü beklentiler, doğrulama durumu, kapsam, kanıt referansları, kanıt yeterliliği, deterministik registry ve senaryo kimliğiyle eşleştirme (ağ yok) |
 | `cli.py` | `validate`, `list`, `run`, `analyze`, `synthetic validate/plan/run`, `campaign validate/run/verify`, `dataset build`, `junit classify`, `results classify` |
+| `webui.py` | Yerel web arayüzü (yalnızca `127.0.0.1`, standart kütüphane `http.server`): senaryo listesi, kullanıcı isteğiyle sentetik deney (`run_synthetic_experiment`), mevcut analiz/sınıflandırıcıyla sonuç görünümü |
 | `_validate.py` | Ortak doğrulama yardımcıları |
 
 ## Kurulum
@@ -239,6 +240,30 @@ durumda hiçbir şey yazılmaz), 5 (çıktı dosyası var).
 
 Beklenmeyen bir istisnada (programlama hatası) kısmi sonuçlar `execution.status = "failed"` ile kaydedilir ve istisna
 hata ayıklama için yeniden fırlatılır (Python izi, çıkış kodu 1).
+
+## Yerel web arayüzü (`webui.py`)
+
+```
+python -m hgs2_lab.webui [--port 8765] [--configs-dir configs] [--results-dir results]
+```
+
+Adres: `http://127.0.0.1:8765/`. Sunucu her zaman `127.0.0.1`'e bağlanır (bağlanma adresi seçeneği yoktur); 8080 ve
+5432 arayüz portu olarak reddedilir. Yeni bağımlılık yoktur (standart kütüphane `http.server`).
+
+* **Dashboard:** uygulama durumu, senaryo sayıları, son çalıştırmanın durumu ve temel sonuçları (kayıt yoksa açıkça
+  belirtilir).
+* **Test senaryoları:** `--configs-dir` altındaki sentetik manifestler, HTTP senaryo dosyaları ve kampanyalar mevcut
+  yükleyicilerle okunur. **Yalnızca sentetik manifestler** arayüzden çalıştırılabilir ("Deneyi başlat"): mevcut
+  `run_synthetic_experiment` aynen çağrılır (uygulamanın kendi `127.0.0.1` sunucusu, ön kontrol, hedef/dinleyici
+  doğrulaması, güvenlik sınırları). Harici hedef gerektiren HTTP senaryoları (`run`) ve kampanyalar yalnızca listelenir.
+* **Sonuçlar:** `--results-dir` altındaki çalıştırmalar `load_run`, `build_analysis` ve `build_run_document` (beklenti
+  dosyasız) ile bellekte gösterilir; sentetik deneylerde etiket dosyasının özeti ve `verdict` eklenir. Arayüz, deneyin
+  kendi sonuç dosyaları dışında dosya yazmaz.
+* Hiçbir deney kendiliğinden başlamaz; aynı anda tek deney çalışır. POST istekleri süreç başına form belirteci ister;
+  `Host`/`Origin` yalnızca `127.0.0.1:<port>` / `localhost:<port>` olabilir. Çalıştırılacak dosya sunucu tarafındaki
+  listeden seçilir; kullanıcı girdisi yol veya komut olarak kullanılmaz.
+* **Kapanış (Ctrl+C):** yeni deney başlatılmaz; çalışan deney kesilmez, bitmesi beklenir (süresi manifestteki
+  `limits.max_duration_seconds` ile sınırlıdır). Arayüzden deney iptali yoktur.
 
 ## Çalıştırma akışı ve durumlar
 
