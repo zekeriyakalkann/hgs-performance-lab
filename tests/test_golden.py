@@ -151,7 +151,7 @@ def test_new_writer_keeps_v2_contract_and_only_adds_metadata_keys(tmp_path):
     new = json.loads((tmp_path / "results" / "new-run.json").read_text(encoding="utf-8"))
     golden = json.loads((golden_dir / "golden-v2-a1331fd-completed.json").read_text(encoding="utf-8"))
     assert new["schema_version"] == golden["schema_version"] == SCHEMA_VERSION == 2
-    assert set(new) - set(golden) == {"clock", "dataset_kind"} and set(golden) <= set(new)
+    assert set(new) - set(golden) == {"clock", "dataset_kind", "response_parsing"} and set(golden) <= set(new)
     assert new["dataset_kind"] == "measurement"
     assert set(new["results"][0]) == set(golden["results"][0])
     assert new["clock"]["wall_time_utc"] == "2026-01-01T00:00:00+00:00"

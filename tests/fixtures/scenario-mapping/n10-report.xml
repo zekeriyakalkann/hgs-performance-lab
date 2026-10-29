@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.EslemeTests" time="1.0" tests="17" failures="2" errors="0" skipped="1">
+  <properties>
+    <property name="spring.datasource.password" value="FAKE-SUITE-PASS-901"/>
+  </properties>
+  <testcase name="metaVeEslemeAyni" classname="com.example.lab.EslemeTests" time="0.010">
+    <properties>
+      <property name="hgs2_lab.scenario_id" value="esleme-ayni"/>
+    </properties>
+  </testcase>
+  <testcase name="yalnizEsleme" classname="com.example.lab.EslemeTests" time="0.011"/>
+  <testcase name="eslemeBeklentiFail" classname="com.example.lab.EslemeTests" time="0.012">
+    <failure message="expected: &lt;ONAYLANDI&gt; but was: &lt;REDDEDILDI&gt;" type="org.opentest4j.AssertionFailedError">org.opentest4j.AssertionFailedError: expected: &lt;ONAYLANDI&gt; but was: &lt;REDDEDILDI&gt;
+	at com.example.lab.EslemeTests.eslemeBeklentiFail(EslemeTests.java:30)
+</failure>
+  </testcase>
+  <testcase name="yalnizMetadata" classname="com.example.lab.EslemeTests" time="0.013">
+    <properties>
+      <property name="hgs2_lab.scenario_id" value="esleme-metadata"/>
+    </properties>
+  </testcase>
+  <testcase name="metaEslemeCelisiyor" classname="com.example.lab.EslemeTests" time="0.014">
+    <properties>
+      <property name="hgs2_lab.scenario_id" value="celiski-meta"/>
+    </properties>
+  </testcase>
+  <testcase name="ikiliEsleme" classname="com.example.lab.EslemeTests" time="0.015"/>
+  <testcase name="eslemesiYok" classname="com.example.lab.EslemeTests" time="0.016"/>
+  <testcase name="emekliEsleme" classname="com.example.lab.EslemeTests" time="0.017"/>
+  <testcase name="sinifsiz" time="0.018"/>
+  <testcase name="gecersizMetadata" classname="com.example.lab.EslemeTests" time="0.019">
+    <properties>
+      <property name="hgs2_lab.scenario_id" value="gecersiz kimlik!"/>
+    </properties>
+  </testcase>
+  <testcase name="atlanan" classname="com.example.lab.EslemeTests" time="0">
+    <skipped message="Donanım gerektirir"/>
+  </testcase>
+  <testcase name="taslakBeklenti" classname="com.example.lab.EslemeTests" time="0.020"/>
+  <testcase name="incelenmisBeklenti" classname="com.example.lab.EslemeTests" time="0.021"/>
+  <testcase name="cakisanBeklenti" classname="com.example.lab.EslemeTests" time="0.022"/>
+  <testcase name="httpBeklentisi" classname="com.example.lab.EslemeTests" time="0.023"/>
+  <testcase name="kayitsizSenaryo" classname="com.example.lab.EslemeTests" time="0.024"/>
+  <testcase name="hassasMesaj" classname="com.example.lab.EslemeTests" time="0.025">
+    <properties>
+      <property name="spring.datasource.password" value="FAKE-CASE-PASS-902"/>
+    </properties>
+    <failure message="POST /api/auth/kart-okut?kartNo=KART-SENTETIK-111&amp;ogrenciNo=OGR-SENTETIK-222 dondu: REDDEDILDI" type="java.lang.AssertionError">java.lang.AssertionError: istek basarisiz password=FAKE-PASS-555
+	Authorization: Bearer FAKE-TOKEN-903
+	at com.example.lab.EslemeTests.hassasMesaj(EslemeTests.java:90)
+</failure>
+  </testcase>
+</testsuite>

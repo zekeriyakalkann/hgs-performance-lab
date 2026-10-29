@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite>
+  <testcase name="adiVarSuresiYok" classname="com.example.lab.MinimalTests"/>
+  <testcase classname="com.example.lab.MinimalTests" time="0.001"/>
+  <testcase name="sinifAdiYok" time="0.002">
+    <failure>java.lang.AssertionError: beklenen 200
+	at com.example.lab.MinimalTests.sinifAdiYok(MinimalTests.java:9)
+</failure>
+  </testcase>
+</testsuite>

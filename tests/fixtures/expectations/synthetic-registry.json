@@ -1,0 +1,134 @@
+{
+  "expectations_version": 2,
+  "registry_id": "lab-sentetik-n7",
+  "evidence": [
+    {
+      "evidence_id": "ev-fixture-pasif",
+      "source_type": "synthetic_fixture",
+      "source_ref": "tests/test_expectations_pipeline.py",
+      "location": "BODIES['kart-pasif-cihaz']",
+      "supports": ["http_status", "business_outcome", "test_outcome"],
+      "review_status": "REVIEWED",
+      "relation": "supports",
+      "source_version": "n7",
+      "description": "Sentetik sunucu kartNo=KART-SENTETIK-111 için 200 + REDDEDILDI döndürür"
+    },
+    {
+      "evidence_id": "ev-fixture-gecerli",
+      "source_type": "synthetic_fixture",
+      "source_ref": "tests/test_expectations_pipeline.py",
+      "location": "BODIES['kart-gecerli']",
+      "supports": ["http_status", "business_outcome"],
+      "review_status": "REVIEWED"
+    },
+    {
+      "evidence_id": "ev-fixture-zaman-asimi",
+      "source_type": "synthetic_fixture",
+      "source_ref": "tests/test_expectations_pipeline.py",
+      "location": "BODIES['zaman-asimi-beklenen']",
+      "supports": ["transport", "test_outcome"],
+      "review_status": "REVIEWED"
+    },
+    {
+      "evidence_id": "ev-kod-taslak",
+      "source_type": "source_code_review",
+      "source_ref": "lab:src/hgs2_lab/synthetic_server.py",
+      "location": "OK_BODY",
+      "supports": ["http_status", "business_outcome"],
+      "review_status": "UNREVIEWED",
+      "description": "İçerik incelenmedi; yalnızca referans"
+    },
+    {
+      "evidence_id": "ev-manuel",
+      "source_type": "manual_review",
+      "source_ref": "N7-INCELEME-01",
+      "supports": ["business_outcome"],
+      "review_status": "UNREVIEWED"
+    },
+    {
+      "evidence_id": "ev-celiski",
+      "source_type": "manual_review",
+      "source_ref": "N7-INCELEME-02",
+      "supports": ["business_outcome"],
+      "review_status": "UNREVIEWED",
+      "relation": "contradicts",
+      "description": "Bu senaryoda ret beklendiği bildirildi"
+    },
+    {
+      "evidence_id": "ev-bilinmeyen",
+      "source_type": "unknown",
+      "source_ref": "kaynak-belirtilmedi",
+      "supports": ["http_status"]
+    }
+  ],
+  "expectations": [
+    {
+      "expectation_id": "exp-kart-pasif", "version": 1, "scenario_id": "kart-pasif-cihaz",
+      "endpoint_id": "POST /api/kart-okut", "status": "VERIFIED", "scope": "synthetic",
+      "expected_http_status": [200], "expected_business_outcome": ["REDDEDILDI"], "expected_test_outcome": "PASS",
+      "evidence_ids": ["ev-fixture-pasif"], "description": "Pasif cihazda kart reddedilir (sentetik)"
+    },
+    {
+      "expectation_id": "exp-kart-gecerli", "version": 1, "scenario_id": "kart-gecerli",
+      "endpoint_id": "POST /api/kart-okut", "status": "VERIFIED", "scope": "synthetic",
+      "expected_http_status": [200], "expected_business_outcome": ["ONAYLANDI"],
+      "evidence_ids": ["ev-fixture-gecerli"]
+    },
+    {
+      "expectation_id": "exp-numara-taslak", "version": 1, "scenario_id": "numara-taslak",
+      "status": "DRAFT", "scope": "synthetic",
+      "expected_http_status": [200], "expected_business_outcome": ["ONAYLANDI"],
+      "evidence_ids": ["ev-kod-taslak"]
+    },
+    {
+      "expectation_id": "exp-parmak-incelendi", "version": 1, "scenario_id": "parmak-incelendi",
+      "status": "REVIEWED", "scope": "synthetic",
+      "expected_business_outcome": ["ONAYLANDI"],
+      "evidence_ids": ["ev-manuel"]
+    },
+    {
+      "expectation_id": "exp-kaynaksiz", "version": 1, "scenario_id": "kaynaksiz",
+      "status": "DRAFT", "scope": "synthetic",
+      "expected_http_status": [200], "expected_business_outcome": ["ONAYLANDI"]
+    },
+    {
+      "expectation_id": "exp-cakisan-a", "version": 1, "scenario_id": "cakisan",
+      "status": "VERIFIED", "scope": "synthetic",
+      "expected_http_status": [200], "expected_business_outcome": ["ONAYLANDI"],
+      "evidence_ids": ["ev-fixture-gecerli"]
+    },
+    {
+      "expectation_id": "exp-cakisan-b", "version": 1, "scenario_id": "cakisan",
+      "status": "DRAFT", "scope": "synthetic",
+      "expected_business_outcome": ["REDDEDILDI"]
+    },
+    {
+      "expectation_id": "exp-eski-v1", "version": 1, "scenario_id": "surumlu",
+      "status": "DEPRECATED", "scope": "synthetic",
+      "expected_business_outcome": ["ONAYLANDI"]
+    },
+    {
+      "expectation_id": "exp-eski-v2", "version": 2, "scenario_id": "surumlu",
+      "status": "VERIFIED", "scope": "synthetic",
+      "expected_http_status": [200], "expected_business_outcome": ["REDDEDILDI"], "expected_test_outcome": "PASS",
+      "evidence_ids": ["ev-fixture-pasif"]
+    },
+    {
+      "expectation_id": "exp-sadece-eski", "version": 1, "scenario_id": "sadece-eski",
+      "status": "DEPRECATED", "scope": "synthetic",
+      "expected_http_status": [200]
+    },
+    {
+      "expectation_id": "exp-zaman-asimi", "version": 1, "scenario_id": "zaman-asimi-beklenen",
+      "status": "VERIFIED", "scope": "synthetic",
+      "expected_transport": "timeout", "expected_test_outcome": "ERROR",
+      "evidence_ids": ["ev-fixture-zaman-asimi"]
+    },
+    {
+      "expectation_id": "exp-celiskili-kanit", "version": 1, "scenario_id": "celiskili-kanit",
+      "status": "DRAFT", "scope": "synthetic",
+      "expected_business_outcome": ["ONAYLANDI"],
+      "evidence_ids": ["ev-manuel", "ev-celiski", "ev-bilinmeyen"]
+    }
+  ]
+}

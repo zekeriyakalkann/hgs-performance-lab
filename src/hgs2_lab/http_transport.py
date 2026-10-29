@@ -20,11 +20,19 @@ Hedef güvenliği (bkz. target_guard.py): `send` her istekte URL'yi ve ad çöz�
 denetler; ayrıca oturuma takılan adaptör, urllib3 soketi açmadan hemen önce adı yeniden
 çözümler ve yalnızca doğrulanmış loopback IP'sine bağlanır. Proxy kullanımı reddedilir.
 Kurallara uymayan hedef `TargetNotAllowed` ile, bağlantı kurulmadan reddedilir.
+
+Dinleyici kimliği (N12): `verify_target` hedef portu dinleyen süreci işletim sisteminden okur ve
+`target_guard.check_listener` ile denetler (istek göndermeden; çalıştırma akışı ilk istekten önce çağırır). Bağlantı
+katmanı da her yeni bağlantıda aynı denetimi yapar; doğrulanmış port, taşıyıcının ömrü boyunca önbellekte tutulur
+(ölçüme ek süre girmesin diye). Bağlantı katmanında portu dinleyen süreç yoksa bağlantı denenir (işletim sistemi
+reddeder) ama port doğrulanmış sayılmaz; dinleyici belirince ilk bağlantıdan önce denetlenir.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -36,9 +44,19 @@ from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.exceptions import NewConnectionError, ReadTimeoutError  # requests'in bağımlılığı
 
 from ._validate import require_number
+from .port_owner import system_listener_lookup
 from .sanitize import sanitize_text, sensitive_values
 from .scenarios import ALLOWED_METHODS, Scenario
-from .target_guard import Resolver, TargetNotAllowed, check_url, resolve_loopback, system_resolver
+from .target_guard import (
+    ListenerLookup,
+    Resolver,
+    TargetNotAllowed,
+    check_listener,
+    check_not_reserved_port,
+    check_url,
+    resolve_loopback,
+    system_resolver,
+)
 from .transport import (
     TransportConnectionError,
     TransportError,
@@ -74,6 +92,32 @@ def _translate(exc: requests.exceptions.RequestException, secrets: list[str]) ->
     return TransportError(text)
 
 
+class _ListenerVerifier:
+    """Port başına dinleyici kimliği denetimi (bkz. target_guard.check_listener); doğrulanan port önbelleğe alınır."""
+
+    def __init__(self, lookup: ListenerLookup, target_process: str | None) -> None:
+        self._lookup = lookup
+        self._target_process = target_process
+        self._verified: dict[int, str] = {}
+        self._lock = threading.Lock()
+
+    def verify(self, port: int, *, require_listener: bool) -> str | None:
+        """Denetim sonucu (in_process / declared_external); dinleyici yok ve zorunlu değilse None."""
+        with self._lock:
+            if port in self._verified:
+                return self._verified[port]
+            try:
+                owners = list(self._lookup(port))
+            except OSError as exc:
+                raise TargetNotAllowed(f"Port {port}'u dinleyen süreç okunamadı ({type(exc).__name__}: {exc}); "
+                                       "hedef doğrulanamadı") from exc
+            if not owners and not require_listener:
+                return None
+            mode = check_listener(port, owners, own_pid=os.getpid(), target_process=self._target_process)
+            self._verified[port] = mode
+            return mode
+
+
 class _LoopbackConnectionMixin:
     """urllib3 bağlantısı: soketi açmadan önce adı çözümler, loopback değilse reddeder,
     yalnızca doğrulanmış IP adresine bağlanır (çözümleme ile bağlantı arasında adres değişemez).
@@ -83,10 +127,14 @@ class _LoopbackConnectionMixin:
     """
 
     _resolver: Resolver = staticmethod(system_resolver)
+    _verifier: _ListenerVerifier | None = None
 
     def _new_conn(self):  # type: ignore[no-untyped-def]
         name = self._dns_host  # type: ignore[attr-defined]
         addresses = resolve_loopback(name.strip("[]"), self.port, type(self)._resolver)  # type: ignore[attr-defined]
+        check_not_reserved_port(self.port)  # type: ignore[attr-defined]
+        if type(self)._verifier is not None:
+            type(self)._verifier.verify(self.port, require_listener=False)  # type: ignore[attr-defined]
         last_error: NewConnectionError | None = None
         try:
             for address in addresses:
@@ -101,8 +149,8 @@ class _LoopbackConnectionMixin:
             self._dns_host = name
 
 
-def _guarded_pool_classes(resolver: Resolver) -> dict[str, type]:
-    attrs = {"_resolver": staticmethod(resolver)}
+def _guarded_pool_classes(resolver: Resolver, verifier: _ListenerVerifier | None = None) -> dict[str, type]:
+    attrs = {"_resolver": staticmethod(resolver), "_verifier": verifier}
     http_conn = type("LoopbackHTTPConnection", (_LoopbackConnectionMixin, HTTPConnection), attrs)
     https_conn = type("LoopbackHTTPSConnection", (_LoopbackConnectionMixin, HTTPSConnection), attrs)
     return {
@@ -114,8 +162,8 @@ def _guarded_pool_classes(resolver: Resolver) -> dict[str, type]:
 class _LoopbackOnlyAdapter(HTTPAdapter):
     """Bağlantıları loopback korumalı urllib3 havuzlarıyla açar; proxy kullanımını reddeder."""
 
-    def __init__(self, resolver: Resolver) -> None:
-        self._pool_classes = _guarded_pool_classes(resolver)
+    def __init__(self, resolver: Resolver, verifier: _ListenerVerifier | None = None) -> None:
+        self._pool_classes = _guarded_pool_classes(resolver, verifier)
         super().__init__()  # init_poolmanager burada çağrılır
 
     def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
@@ -137,6 +185,13 @@ class _LoopbackOnlyAdapter(HTTPAdapter):
         super().close()
 
 
+def _content_type(response: Any) -> str | None:
+    """Content-Type başlığı; başlık yoksa veya oturum başlık taşımayan bir yanıt döndürdüyse None."""
+    headers = getattr(response, "headers", None)
+    value = headers.get("Content-Type") if headers is not None else None
+    return value if isinstance(value, str) else None
+
+
 class RequestsTransport:
     """`Transport` protokolünün requests uygulaması.
 
@@ -147,6 +202,9 @@ class RequestsTransport:
     Dışarıdan bir `requests.Session` verilirse `trust_env=False` ve proxy'siz olmalıdır;
     ona da loopback korumalı adaptör takılır. Başka türden oturum nesneleri (test sahteleri)
     için `send` içindeki URL ve çözümleme kontrolü yine uygulanır.
+
+    `listener_lookup` / `target_process`: dinleyici kimliği denetimi (bkz. `verify_target`). Varsayılan, işletim
+    sistemi tablosudur (port_owner.py); `target_process` verilmezse yalnızca bu sürecin dinlediği portlara gidilir.
     """
 
     def __init__(
@@ -154,7 +212,10 @@ class RequestsTransport:
         session: requests.Session | None = None,
         clock: Callable[[], int] = time.perf_counter_ns,
         resolver: Resolver = system_resolver,
+        listener_lookup: ListenerLookup = system_listener_lookup,
+        target_process: str | None = None,
     ) -> None:
+        self._verifier = _ListenerVerifier(listener_lookup, target_process)
         self._owns_session = session is None
         if session is None:
             session = requests.Session()
@@ -162,7 +223,7 @@ class RequestsTransport:
         if isinstance(session, requests.Session):
             if session.trust_env or session.proxies:
                 raise ValueError("Oturum trust_env=False olmalı ve proxy içermemeli")
-            adapter = _LoopbackOnlyAdapter(resolver)
+            adapter = _LoopbackOnlyAdapter(resolver, self._verifier)
             session.mount("http://", adapter)
             session.mount("https://", adapter)
         self._session = session
@@ -179,12 +240,24 @@ class RequestsTransport:
     def __exit__(self, *exc_info: object) -> None:
         self.close()
 
+    def verify_target(self, url: str) -> dict[str, Any]:
+        """İstek göndermeden hedefi denetler: şema/ad, çözümleme (loopback), ayrılmış port ve dinleyici kimliği.
+
+        Dinleyici zorunludur (yoksa hedef doğrulanamaz). Uymazsa `TargetNotAllowed`; uyarsa kanıt özeti döner.
+        """
+        host, port = check_url(url)
+        resolve_loopback(host, port, self._resolver)
+        check_not_reserved_port(port)
+        mode = self._verifier.verify(port, require_listener=True)
+        return {"port": port, "listener": mode}
+
     def send(self, scenario: Scenario, url: str, timeout_seconds: float) -> TransportResponse:
         if scenario.method not in ALLOWED_METHODS:
             raise ValueError(f"Desteklenmeyen HTTP metodu: {scenario.method!r}")
         timeout = require_number(timeout_seconds, "timeout_seconds", ValueError, positive=True)
         host, port = check_url(url)  # şema ve ad; TargetNotAllowed yayılır
         resolve_loopback(host, port, self._resolver)  # çözümlenen adreslerin tamamı loopback olmalı
+        check_not_reserved_port(port)  # loopback olsa da gerçek HGS2/PostgreSQL portuna gidilmez
         headers, data = self._prepare(scenario)  # ölçüm dışı; hatalar yayılır
         secrets = sensitive_values(headers, url)  # hata mesajlarında maskelenecek değerler
 
@@ -215,6 +288,7 @@ class RequestsTransport:
             size_bytes=len(body),
             duration_ms=(end - start) / 1_000_000,
             body=body,
+            content_type=_content_type(response),
         )
 
     @staticmethod

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.OddTests" time="abc" tests="9" errors="0" skipped="0" failures="x" timestamp="dun">
+  <testcase name="hemFailureHemSkipped" classname="com.example.lab.OddTests" time="0.1">
+    <failure message="bir" type="java.lang.AssertionError"/>
+    <skipped/>
+  </testcase>
+  <testcase name="negatifSure" classname="com.example.lab.OddTests" time="-1"/>
+  <testcase name="virgulluSure" classname="com.example.lab.OddTests" time="0,437"/>
+  <testcase name="sayiOlmayanSure" classname="com.example.lab.OddTests" time="hizli"/>
+  <testcase name="ikiFailure" classname="com.example.lab.OddTests" time="0.2">
+    <failure message="ilk" type="java.lang.AssertionError"/>
+    <failure message="ikinci" type="java.lang.AssertionError"/>
+  </testcase>
+  <testcase name="tekrarlaGecti" classname="com.example.lab.OddTests" time="0.3">
+    <flakyFailure message="ilk denemede" type="java.lang.AssertionError"/>
+  </testcase>
+</testsuite>

@@ -1,0 +1,10 @@
+{
+  "scenario_mapping_version": 1,
+  "mapping_set_id": "lab-hazirlik-n10",
+  "mappings": [
+    {"mapping_id": "map-hazir-kart", "test_class": "com.example.lab.HazirTests", "test_name": "kartPasifCihaz",
+     "scenario_id": "hazir-kart-pasif", "status": "ACTIVE", "evidence_ref": "N10-ESLEME-INCELEME-03"},
+    {"mapping_id": "map-hazir-numara", "test_class": "com.example.lab.HazirTests", "test_name": "numaraGecerli",
+     "scenario_id": "hazir-numara-gecerli", "status": "ACTIVE", "evidence_ref": "N10-ESLEME-INCELEME-03"}
+  ]
+}

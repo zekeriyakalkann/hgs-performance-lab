@@ -35,6 +35,36 @@ SLOW_BODY_PARTS = (b"a" * 100, b"b" * 100)
 STALL_BODY_PARTS = (b"12345", b"67890")
 GZIP_PLAIN = b"hgs2-performance-lab " * 500
 GZIP_COMPRESSED = gzip.compress(GZIP_PLAIN, mtime=0)
+# İş sonucu ayrıştırma testleri (N6): HGS2 benzeri düz metin/JSON gövdeler. Kişisel değerler sentetiktir.
+BUSINESS_SECRET = "KART-SENTETIK-111"
+BUSINESS_BODIES = {
+    "/business/reddedildi": (200, b"REDDEDILDI", "text/plain;charset=UTF-8"),
+    "/business/onaylandi": (200, b"ONAYLANDI", "text/plain;charset=UTF-8"),
+    "/business/hata-500": (500, b"HATA", "text/plain;charset=UTF-8"),
+    "/business/json-field": (200, json.dumps({"business_outcome": "REDDEDILDI", "kartNo": BUSINESS_SECRET}).encode(),
+                             "application/json"),
+    "/business/malformed-json": (200, b'{"business_outcome": "REDD', "application/json"),
+    "/business/empty": (200, b"", "text/plain;charset=UTF-8"),
+    "/business/large": (200, b"REDDEDILDI" + b" " * 5000, "text/plain;charset=UTF-8"),
+    "/business/html": (200, f"<p>REDDEDILDI {BUSINESS_SECRET}</p>".encode(), "text/html"),
+}
+# N11: gerçek HGS2 kaynak kodundan statik olarak çıkarılan yanıt biçimlerinin sentetik taklidi (README "Gerçek HGS2 API
+# sözleşmesi"). Bu bir HGS2 değildir; yalnızca yanıt BİÇİMİNİ taklit eder. Değerler sentetiktir.
+HGS2_TEXT = "text/plain;charset=UTF-8"
+HGS2_BODIES = {
+    ("GET", "/hgs2/sensor/pending-none"): (200, b"NONE", HGS2_TEXT),
+    ("GET", "/hgs2/sensor/pending-card"): (200, b"SCAN_CARD", HGS2_TEXT),
+    ("GET", "/hgs2/sensor/result-waiting"): (200, b'{"status":"WAITING"}', "application/json"),
+    ("GET", "/hgs2/sensor/result-ready"): (200, json.dumps({"status": "READY", "value": BUSINESS_SECRET}).encode(),
+                                           "application/json"),
+    ("POST", "/hgs2/sensor/start"): (200, b'{"sessionId":"sentetik12345"}', "application/json"),
+    ("POST", "/hgs2/auth/kart-okut-onay"): (200, b"ONAYLANDI", HGS2_TEXT),
+    ("POST", "/hgs2/auth/kart-okut-ret"): (200, b"REDDEDILDI", HGS2_TEXT),
+    ("POST", "/hgs2/auth/unknown"): (200, b"BEKLENMEYEN", HGS2_TEXT),
+    ("POST", "/hgs2/auth/bad-request"): (400, b'{"timestamp":"2026-01-01T00:00:00","status":400,"error":"Bad Request"}',
+                                         "application/json"),
+}
+EXTERNAL_REDIRECT_TARGET = "http://203.0.113.5/hello"  # belge aralığı; izlenmemesi beklenir
 
 
 class ExternalNetworkBlocked(AssertionError):
@@ -144,6 +174,15 @@ def _redirect(h: _Handler) -> None:
     h._send(302, b"", headers=(("Location", "/hello"),))
 
 
+def _redirect_external(h: _Handler) -> None:
+    h._send(302, b"", headers=(("Location", EXTERNAL_REDIRECT_TARGET),))
+
+
+def _hgs2(h: _Handler) -> None:
+    status, body, content_type = HGS2_BODIES[(h.command, urlsplit(h.path).path)]
+    h._send(status, body, content_type)
+
+
 def _gzip(h: _Handler) -> None:
     h._send(200, GZIP_COMPRESSED, headers=(("Content-Encoding", "gzip"),))
 
@@ -171,11 +210,19 @@ def _stall_body(h: _Handler) -> None:
     h.wfile.write(second)
 
 
+def _business(h: _Handler) -> None:
+    status, body, content_type = BUSINESS_BODIES[urlsplit(h.path).path]
+    h._send(status, body, content_type)
+
+
 _ROUTES = {
+    **{("POST", path): _business for path in BUSINESS_BODIES},
+    **{key: _hgs2 for key in HGS2_BODIES},
     ("GET", "/hello"): _hello,
     ("POST", "/echo"): _echo,
     ("GET", "/error"): _error,
     ("GET", "/redirect"): _redirect,
+    ("GET", "/redirect-external"): _redirect_external,
     ("GET", "/gzip"): _gzip,
     ("GET", "/slow-body"): _slow_body,
     ("GET", "/stall-headers"): _stall_headers,

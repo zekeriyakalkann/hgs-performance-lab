@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.SensitiveTests" time="0.1" tests="2" errors="0" skipped="0" failures="2">
+  <testcase name="kartOkut[kartNo=KART-SENTETIK-111]" classname="com.example.lab.SensitiveTests" time="0.010">
+    <failure message="POST /api/auth/kart-okut?kartNo=KART-SENTETIK-111&amp;deviceId=3 dondu: REDDEDILDI; govde {&quot;ogrenciNo&quot;: &quot;OGR-SENTETIK-222&quot;, &quot;parmakIzi&quot;: &quot;PARMAK-SENTETIK-333&quot;}" type="java.lang.AssertionError">java.lang.AssertionError: istek basarisiz
+	Authorization: Bearer FAKE-TOKEN-444
+	Cookie: JSESSIONID=FAKE-COOKIE-666
+	form: kartNo=KART-SENTETIK-111&amp;password=FAKE-PASS-555
+	at com.example.lab.SensitiveTests.kartOkut(SensitiveTests.java:30)
+</failure>
+  </testcase>
+  <testcase name="ogrenciKaydet" classname="com.example.lab.SensitiveTests" time="0.011">
+    <failure message="OgrenciNo: OGR-SENTETIK-222 kayitli degil; PARMAKIZI='PARMAK-SENTETIK-333'" type="org.opentest4j.AssertionFailedError"/>
+  </testcase>
+</testsuite>

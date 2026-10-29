@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="lab" tests="4" failures="0" errors="3">
+  <testsuite name="com.example.lab.UserTests" time="0.4" tests="2" errors="1" skipped="0" failures="0">
+    <testcase name="listele" classname="com.example.lab.UserTests" time="0.010"/>
+    <testcase name="uzakServisYavas" classname="com.example.lab.UserTests" time="5.002">
+      <error message="Read timed out" type="java.net.SocketTimeoutException">java.net.SocketTimeoutException: Read timed out
+	at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:288)
+</error>
+    </testcase>
+  </testsuite>
+  <testsuite name="com.example.lab.LogTests" time="0.2" tests="2" errors="2" skipped="0" failures="0">
+    <testcase name="logYaz" classname="com.example.lab.LogTests" time="0.020">
+      <error message="Cannot invoke &quot;String.trim()&quot; because &quot;kartNo&quot; is null" type="java.lang.NullPointerException">java.lang.NullPointerException
+	at com.example.lab.LogService.yaz(LogService.java:21)
+</error>
+    </testcase>
+    <testcase name="logOku" classname="com.example.lab.LogTests" time="0.030">
+      <error/>
+    </testcase>
+  </testsuite>
+  <testsuite name="com.example.lab.EmptyTests" tests="0" errors="0" skipped="0" failures="0"/>
+</testsuites>

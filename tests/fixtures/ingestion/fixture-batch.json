@@ -1,0 +1,66 @@
+{
+  "ingestion_version": 1,
+  "batch_id": "lab-alim-fikstur-n9",
+  "dataset_kind": "fixture",
+  "entries": [
+    {
+      "source_record_id": "fx-junit-kart-gecerli",
+      "source_reference": {"source_file": "TEST-com.example.lab.KartTests.xml", "location": "kartGecerli"},
+      "test_scope": "kart okutma kabul akışı (sentetik)",
+      "label_review": {"status": "REVIEWED", "evidence_ref": "FIKSTUR-INCELEME-1", "reviewer_role": "qa"},
+      "record": {"record_id": "r-fx-1", "source_type": "junit_xml", "dataset_kind": "fixture", "test_outcome": "FAIL",
+                 "scenario_id": "kart-gecerli", "test_id": "com.example.lab.KartTests#kartGecerli",
+                 "exception_type": "org.opentest4j.AssertionFailedError",
+                 "error_message": "expected: <ONAYLANDI> but was: <REDDEDILDI>",
+                 "label": "APPLICATION_FAILURE", "label_source": "human_review"}
+    },
+    {
+      "source_record_id": "fx-junit-incelenmemis",
+      "source_reference": {"source_file": "TEST-com.example.lab.KartTests.xml", "location": "kartAtlandi"},
+      "label_review": {"status": "UNREVIEWED"},
+      "record": {"record_id": "r-fx-2", "source_type": "junit_xml", "dataset_kind": "fixture", "test_outcome": "ERROR",
+                 "exception_type": "java.lang.NullPointerException",
+                 "label": "APPLICATION_FAILURE", "label_source": "human_review"}
+    },
+    {
+      "source_record_id": "fx-minimal",
+      "record": {"record_id": "r-fx-3", "source_type": "junit_xml", "dataset_kind": "fixture", "test_outcome": "PASS"}
+    },
+    {
+      "record": {"record_id": "r-fx-4", "source_type": "junit_xml", "dataset_kind": "fixture", "test_outcome": "PASS"}
+    },
+    {
+      "source_record_id": "fx-bilinmeyen-sonuc",
+      "record": {"record_id": "r-fx-5", "source_type": "junit_xml", "dataset_kind": "fixture", "test_outcome": "UNKNOWN"}
+    },
+    {
+      "source_record_id": "fx-hassas",
+      "source_reference": {"source_file": "TEST-com.example.lab.KartTests.xml", "location": "hassasMesaj"},
+      "record": {"record_id": "r-fx-6", "source_type": "junit_xml", "dataset_kind": "fixture", "test_outcome": "FAIL",
+                 "exception_type": "java.lang.AssertionError",
+                 "error_message": "POST /api/auth/kart-okut?kartNo=KART-SENTETIK-111 dondu: REDDEDILDI",
+                 "stack_trace": "java.lang.AssertionError\n\tAuthorization: Bearer FAKE-TOKEN-913"}
+    },
+    {
+      "source_record_id": "fx-junit-kart-gecerli",
+      "record": {"record_id": "r-fx-7", "source_type": "junit_xml", "dataset_kind": "fixture", "test_outcome": "FAIL"}
+    },
+    {
+      "source_record_id": "fx-sema-1",
+      "record": {"record_id": "r-fx-8", "source_type": "lab_result", "dataset_kind": "fixture", "test_outcome": "PASS",
+                 "status_code": 200, "expected_result": {"status_codes": [200], "business_outcomes": [],
+                                                        "description": null}}
+    },
+    {
+      "source_record_id": "fx-karisik-tur",
+      "record": {"record_id": "r-fx-9", "source_type": "junit_xml", "dataset_kind": "real", "test_outcome": "PASS"}
+    },
+    {
+      "source_record_id": "fx-lab-kart-pasif",
+      "source_reference": {"source_file": "run-fx.json", "location": "seq=4"},
+      "record": {"record_id": "r-fx-10", "source_type": "lab_result", "dataset_kind": "fixture",
+                 "test_outcome": "PASS", "scenario_id": "kart-pasif-cihaz", "status_code": 200,
+                 "business_outcome": "REDDEDILDI"}
+    }
+  ]
+}

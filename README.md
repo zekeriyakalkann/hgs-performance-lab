@@ -10,6 +10,10 @@ HGS2 ölçümü değildir ve sonuçlarda `dataset_kind = "synthetic"` ile ayrıl
 ve kendi sentetik yerel HTTP sunucularına karşı çalıştırıldı. **Gerçek HGS2 API'sine karşı hiçbir test veya ölçüm yapılmadı**; loopback dışı bir
 hedefe izin veren bir ayar da yoktur. **Eğitilmiş bir makine öğrenmesi modeli yoktur.** Tek dedektör, sentetik
 özellik tablosu üzerinde çalışan istatistiksel Robust Z-score'dur (F5); gerçek HGS2 verisiyle değerlendirilmedi.
+`junit classify`, JUnit/Surefire XML test raporlarını çevrimdışı olarak ortak bir kayıt modeline (`TestRecord`)
+dönüştürür ve **kural tabanlı**, kanıt gösteren bir sınıflandırıcıyla yorumlar (bkz. "Test sonucu analizi").
+`run`/`synthetic run` yanıt gövdesinden tanınan iş sonucunu (`REDDEDILDI`, `HATA` …) çıkarır; `results classify`
+kaydedilmiş bir çalıştırmayı aynı sınıflandırıcıyla yorumlar. Kurallar gerçek HGS2 hata örnekleriyle doğrulanmadı.
 
 ## Mimari
 
@@ -39,7 +43,7 @@ Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `
 | `http_transport.py` | `RequestsTransport`: requests tabanlı taşıyıcı, bağlantı katmanında loopback koruması, hata çevirisi |
 | `models.py` | `RawResult`: girişim başına ham sonuç kaydı, `run_id` doğrulaması |
 | `metadata.py` | JSON üst verisi: çalıştırma durumu, kod/bağımlılık/ortam bilgisi, girdi özetleri, maskelenmiş görüntüler |
-| `sanitize.py` | Hassas sorgu değerlerini, URL parolalarını ve hata mesajlarındaki gizli değerleri maskeler |
+| `sanitize.py` | Hassas ve kişisel değerleri maskeler: URL sorgusu, form gövdesi, JSON yapısı, serbest metin (log, hata, iz) |
 | `storage.py` | CSV/JSON yazma ve okuma; şema sürüm politikası; üzerine yazmaz, atomik yayımlar, kısmi sonuçları ayrı adla yazar |
 | `reader.py` | Analiz için okuma: dosya keşfi, SHA-256, CSV/JSON tutarlılığı, kayıt bütünlüğü, en küçük metadata doğrulaması |
 | `analysis.py` | Çevrimdışı istatistiksel baseline: sayımlar, oranlar, yüzdelikler, bootstrap güven aralıkları, throughput |
@@ -52,7 +56,17 @@ Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `
 | `features.py` | Doğrulanmış veri setinden deterministik özellik tablosu: `features.csv` (gözlemler) + `labels.csv` (tasarım/hedef) + manifest (ağ yok) |
 | `robust_z.py` | Robust Z-score dedektörü (F5): yalnızca `duration_ms` listesinden kalibrasyon ve skor; tablo/etiket görmez (ağ yok) |
 | `detection.py` | Özellik tablosunun doğrulanması, train normal kalibrasyonu, bölüm bazında değerlendirme ve metrikler (ağ yok) |
-| `cli.py` | `validate`, `list`, `run`, `analyze`, `synthetic validate/plan/run`, `campaign validate/run/verify`, `dataset build` |
+| `records.py` | Birleşik test kaydı `TestRecord`: kaynak sonucu, beklenen/gözlenen, hata bilgisi, veri kalitesi, analiz; JSON gidiş-dönüş; maskeleme sınırı (ağ yok) |
+| `junit_report.py` | JUnit/Surefire XML ayrıştırıcısı: güvenli XML (DOCTYPE/varlık reddi, boyut sınırı), her testcase → `TestRecord` (ağ yok) |
+| `classify.py` | Kanıta dayalı kural tabanlı test sonucu sınıflandırıcısı ve ortak sınıflandırma belgesi (ağ yok, model yok, F5'ten bağımsız) |
+| `response_parser.py` | HTTP yanıt gövdesi ayrıştırıcısı: içerik türü, boyut sınırı, tanınan iş sonucu; gövde içeriği yazılmaz (ağ yok) |
+| `result_analysis.py` | Kaydedilmiş çalıştırma → beklenti dosyası + ayrıştırma özetleri → `TestRecord` → sınıflandırıcı (ağ yok) |
+| `readiness.py` | Gerçek entegrasyon hazırlığı: rapor alan envanteri, beklenti hazırlığı, önkoşul denetimi (READY / READY_WITH_WARNINGS / BLOCKED); ağ yok |
+| `ingestion.py` | Test sonucu örnekleri için veri alım sözleşmesi (`ingestion_version 1`): kaynak kimliği, kaynak kanıtı, etiket incelemesi, tekrar ve kapsam kuralları; mevcut hatta aktarım (ağ yok) |
+| `junit_analysis.py` | Toplu JUnit/Surefire analizi: raporlar → TestRecord → senaryo çözümlemesi → beklenti eşleştirme → sınıflandırıcı → sayaçlı JSON belge + kayıt başına iz (`scenario_trace`) (ağ yok) |
+| `scenario_mapping.py` | Senaryo eşleme sözleşmesi (`scenario_mapping_version 1`): kararlı test tanımlayıcısı (`classname#name`) → senaryo kimliği; metadata ile birleşik çözümleme, çelişki ve belirsizlikte kimlik seçilmez (ağ yok) |
+| `expectations.py` | Beklenti sözleşmesi (`expectations_version 2`): sürümlü beklentiler, doğrulama durumu, kapsam, kanıt referansları, kanıt yeterliliği, deterministik registry ve senaryo kimliğiyle eşleştirme (ağ yok) |
+| `cli.py` | `validate`, `list`, `run`, `analyze`, `synthetic validate/plan/run`, `campaign validate/run/verify`, `dataset build`, `junit classify`, `results classify` |
 | `_validate.py` | Ortak doğrulama yardımcıları |
 
 ## Kurulum
@@ -77,11 +91,15 @@ Gerçek bir sistem yerine boş bir dizini sunan Python'un yerleşik sunucusuyla 
 
 ```
 # 1. terminal: yalnızca 127.0.0.1'de dinleyen, boş bir dizini sunan yerel sunucu
-python -m http.server 8080 --bind 127.0.0.1 --directory <boş-bir-dizin>
+python -m http.server 18080 --bind 127.0.0.1 --directory <boş-bir-dizin>
 
 # 2. terminal: proje kökünde
-copy configs\config.example.json configs\config.json        # base_url: http://127.0.0.1:8080
+copy configs\config.example.json configs\config.json        # base_url: http://127.0.0.1:18080
 ```
+
+Bu sunucu Lab'den ayrı bir süreçtir; örnek yapılandırma onu `"target_process": "python.exe"` ile açıkça bildirir
+(bkz. "Güvenlik sınırları" → dinleyici kimliği). Bildirim yoksa ya da 18080'i başka bir süreç (ör. bir JVM) dinliyorsa
+`run` hiçbir istek göndermeden reddedilir.
 
 `configs/demo.json` (yerel dosya; `configs/*.json` Git dışında tutulur):
 
@@ -107,6 +125,7 @@ Sonuç: `results/<run_id>.csv` ve `results/<run_id>.json` (örnek yapılandırma
 | `output_dir` | hayır (`results`) | Sonuç dizini |
 | `scenarios_file` | hayır (`scenarios.json`) | Senaryo dosyası (`--scenarios` ile değiştirilebilir) |
 | `limits` | hayır | Güvenlik sınırları; bkz. "İstek bütçesi ve kontrollü durdurma" |
+| `target_process` | hayır | Hedef portu Lab süreci dışında bir süreç dinliyorsa o sürecin dosya adı (ör. `python.exe`). Yüklemede biçimi denetlenir; JVM/PostgreSQL adları (`java.exe`, `javaw.exe`, `postgres.exe` …) reddedilir. Verilmezse `run` yalnızca Lab'in kendi süreç içi sunucularına gider. Bkz. "Güvenlik sınırları" |
 
 **Göreli yollar yapılandırma dosyasının bulunduğu dizine göre çözülür**, çalışma dizinine göre değil.
 Örneğin `configs/config.json` içindeki `"output_dir": "../results"` her zaman proje kökündeki `results/`
@@ -148,6 +167,17 @@ hgs2-lab dataset build      --campaign-dir DİZİN --output DOSYA [--split-seed 
                             [--invalid-policy exclude|fail]
 hgs2-lab dataset features   --campaign-dir DİZİN --dataset DOSYA --output-dir DİZİN [--policy observed-v1]
 hgs2-lab detect robust-z    --features-dir DİZİN --output DOSYA
+hgs2-lab junit classify     --report DOSYA [--report DOSYA ...] --output DOSYA
+                            [--dataset-kind real|synthetic|fixture|unknown] [--expectations DOSYA]
+                            [--scenario-map DOSYA]
+hgs2-lab results classify   --run-id RUN_ID --results-dir DİZİN --output DOSYA [--expectations DOSYA]
+                            [--dataset-kind real|synthetic|fixture|unknown]
+hgs2-lab readiness check     --report DOSYA [--report DOSYA ...] [--expectations DOSYA] [--scope real|synthetic]
+                            [--scenario-map DOSYA] [--output DOSYA]
+hgs2-lab ingest analyze     --file DOSYA [--expectations DOSYA] --output DOSYA
+hgs2-lab expectations validate --file DOSYA
+hgs2-lab expectations show     --file DOSYA [--scenario SENARYO]
+hgs2-lab scenario-map validate --file DOSYA
 ```
 
 * `validate`: yapılandırma ve senaryoları doğrular, çözülen yolları ve hedefin `run` için izinli olup olmadığını
@@ -165,6 +195,18 @@ hgs2-lab detect robust-z    --features-dir DİZİN --output DOSYA
   kapatır ve etiket/sunucu olayı dosyalarını yazar. Ayrıntılar: "Sentetik deneyler (`synthetic`)".
 * `campaign validate` / `campaign run` / `campaign verify` ve `dataset build`: toplu sentetik deneyler, katalog ve veri
   seti. Ayrıntılar: "Sentetik kampanyalar ve veri seti".
+* `junit classify`: verilen JUnit/Surefire XML raporlarını toplu olarak okur. İsteğe bağlı beklenti dosyasıyla açık
+  senaryo kimliği üzerinden eşleştirir, her testi sınıflandırır ve sayaçlı tek bir JSON belgesi yazar. Hedef sisteme
+  erişmez, test çalıştırmaz. Ayrıntılar: "Toplu JUnit analizi".
+* `results classify`: kaydedilmiş bir çalıştırmanın ölçüm isteklerini (durum kodu, iş sonucu, taşıma hatası, yanıt
+  ayrıştırma özeti) beklenti dosyasıyla birlikte sınıflandırır. İstek göndermez; sonuç dosyalarını değiştirmez.
+* `readiness check`: gerçek entegrasyon önkoşullarını çevrimdışı denetler; `ingest analyze`: veri alım paketini
+  doğrulayıp mevcut analiz hattından geçirir. Ayrıntılar: "Gerçek HGS2 entegrasyon hazırlığı".
+* `expectations validate` / `expectations show`: beklenti sözleşmesini doğrular veya beklentileri, durumlarını ve kanıt
+  referanslarını listeler. Dosyayı yalnızca okur. Ayrıntılar: "Beklenti sözleşmesi".
+* `scenario-map validate`: senaryo eşleme dosyasını doğrular; `junit classify` ve `readiness check` için
+  `--scenario-map`: senaryo kimliklerini testcase özelliği ve eşleme dosyasından çözer. Ayrıntılar: "Senaryo
+  eşleştirme ve uçtan uca kabul (N10)".
 
 `--config` varsayılanı `configs/config.json`'dır. Windows'ta kurulum yapılmadan: `.\.venv\Scripts\python.exe -m hgs2_lab.cli ...`.
 
@@ -184,6 +226,15 @@ Kampanya ve veri seti komutları: `campaign run` 0 (tüm deneyler geçerli), 6 (
 değil; hiç deney çalışmadı), 1 (manifest hatası), 130 (Ctrl+C); `campaign verify` 0 (sorun yok) / 1 (sorun var);
 `dataset build` 0 (yazıldı; uyarılar dosyada), 1 (doğrulama, politika veya bütünlük hatası), 5 (çıktı dosyası var);
 `dataset features` 0 (yazıldı), 1 (doğrulama hatası; hiçbir dosya yazılmaz), 5 (çıktı dizini boş değil veya yazılamadı).
+`junit classify` 0 (yazıldı, tüm raporlar okundu), 1 (yazıldı ama en az bir rapor reddedildi, belgede `file_errors`;
+ya da beklenti dosyası okunamadı/geçersiz, bu durumda hiçbir dosya yazılmaz), 5 (çıktı dosyası var veya yazılamadı). `results classify` 0 (yazıldı), 1 (sonuç veya beklenti dosyası okunamadı/geçersiz;
+hiçbir dosya yazılmaz), 5 (çıktı dosyası var veya yazılamadı). `expectations validate` 0 (geçerli; aynı senaryo için
+birden fazla etkin beklenti UYARI olarak listelenir), 1 (geçersiz; tüm bulgular listelenir); `expectations show` 1 (dosya
+geçersiz veya senaryo için beklenti yok). `readiness check` 0 (READY veya READY_WITH_WARNINGS), 1 (BLOCKED), 5 (çıktı
+dosyası var); `scenario-map validate` 0 (geçerli; aynı test için farklı senaryolara giden eşlemeler UYARI olarak
+listelenir), 1 (geçersiz; tüm bulgular listelenir); `junit classify --scenario-map` geçersiz eşleme dosyasında 1 döner ve
+hiçbir dosya yazmaz; `ingest analyze` 0 (yazıldı), 1 (yazıldı ama girdi reddedildi; ya da paket/beklenti dosyası geçersiz, bu
+durumda hiçbir şey yazılmaz), 5 (çıktı dosyası var).
 | 130 | `run` Ctrl+C ile durduruldu; kısmi sonuçlar `.partial` dosyalarında |
 
 Beklenmeyen bir istisnada (programlama hatası) kısmi sonuçlar `execution.status = "failed"` ile kaydedilir ve istisna
@@ -227,6 +278,45 @@ Kontrol üç katmanda yapılır (`target_guard.py`, `http_transport.py`):
 
 Ayrıca:
 
+* **Loopback, yalıtım değildir (N11).** Aynı makinede çalışan gerçek HGS2 de `127.0.0.1`'dedir; yukarıdaki üç katman
+  onu yalıtılmış bir test sunucusundan ayıramaz. Ek korumalar:
+  * **Ayrılmış portlar** (`target_guard.RESERVED_PORTS`): `8080` (gerçek HGS2 `server.port`) ve `5432` (gerçek HGS2
+    PostgreSQL portu). `RequestsTransport.send` ve bağlantı katmanı bu portlara loopback'te bile bağlanmaz
+    (`TargetNotAllowed`; `run` bağlantı kurulmadan `aborted` / `target_not_allowed` olur). Açan bir ayar yoktur.
+    Bu bir alt korumadır: gerçek HGS2 başka bir portta başlatılırsa tanınmaz. Örnek yapılandırmanın hedefi bu
+    nedenle `http://127.0.0.1:18080`'dir. N12'den beri `run` ayrılmış portu ilk istekten önce reddeder
+    (`PreflightError`, dosya yazılmaz).
+  * **Dinleyici kimliği (N12, `target_guard.check_listener`, `port_owner.py`; yalnızca Windows):** gerçek ağ
+    taşıyıcısıyla her çalıştırmada, ilk istekten ÖNCE hedef portu dinleyen süreç(ler) işletim sisteminin TCP
+    dinleyici tablosundan okunur (`GetExtendedTcpTable`; ağ trafiği yok). İzin yalnızca: (a) dinleyicinin tamamı bu
+    Lab sürecidir (sentetik sunucu, test sunucuları), ya da (b) dinleyici başka bir süreçtir ve dosya adı
+    yapılandırmadaki `target_process` ile eşleşir. **JVM ve PostgreSQL süreçleri bildirilse bile reddedilir**: gerçek
+    HGS2 (Spring Boot) bir JVM'de çalıştığı için, hangi portta başlatılırsa başlatılsın hedef olamaz. Dinleyici yoksa,
+    süreç adı okunamıyorsa (ör. hizmet olarak çalışan süreç; bu makinedeki PostgreSQL böyledir) ya da tablo
+    okunamıyorsa hedef doğrulanmamış sayılır ve `run` `PreflightError` ile reddedilir; hiçbir istek gönderilmez ve
+    dosya yazılmaz. Sonuç metadata'da `execution.target_verification` (`{"port", "listener": "in_process" |
+    "declared_external"}`) olarak kaydedilir. Bağlantı katmanı her yeni bağlantıda aynı denetimi yapar; doğrulanan
+    port taşıyıcının ömrü boyunca önbellekte tutulur (ölçüme ek süre girmesin diye; okuma ~0,1 ms).
+    **Sınırlar:** süreç adı kimlik kanıtı değildir (JVM olmayan bir vekil/proxy süreç gerçek sisteme iletebilir;
+    `python.exe` adını taşıyan herhangi bir Python süreci bildirimle eşleşir); denetim okunduğu ana aittir (doğrulama
+    ile bağlantı arasında ya da çalıştırma sırasında dinleyici değişirse yakalanmaz); yalnızca Windows'ta uygulanır,
+    diğer platformlarda tablo okunamadığı için gerçek ağ çalıştırmaları reddedilir. Sahte taşıyıcılar (birim
+    testleri) ağ kullanmadığı için denetlenmez. Yapılandırma yüklenirken yalnızca `target_process` biçimi denetlenir:
+    `LabConfig` sahte taşıyıcılı testlerde de kullanılır ve dinleyici ancak çalıştırma anında okunabilir.
+  * **Test süreci yalıtımı** (`tests/conftest.py`, `tests/isolation_guard.py`): testlerde her giden bağlantı,
+    hedef loopback IP'si değilse ya da port bu test sürecinde bind edilmiş ve **hâlâ açık** bir sokete ait değilse
+    kurulmadan engellenir ve test başarısız sayılır. N12: soket kapanınca port "bırakılmış" sayılır; bırakılmış porta
+    yalnızca o anda hiçbir süreç dinlemiyorsa bağlanılabilir (kapalı sunucu testleri). Bırakılan portu başka bir süreç
+    (ör. gerçek HGS2) dinlemeye başlarsa bağlantı engellenir. **Sınırlar:** bu, işletim sistemi düzeyinde ağ
+    yalıtımı değildir; yalnızca bu Python sürecindeki `socket.socket` çağrılarını görür. Alt süreçler, C
+    uzantılarının kendi soketleri, `--noconftest` ya da pytest dışında çalıştırma ve Windows'ta asyncio Proactor
+    (`ConnectEx`) yolu kapsam dışıdır. Mevcut alt süreç testleri yalnızca modül içe aktarma denetimi yapar ya da
+    (N12 hedef kimliği testleri) bağlantı kurmayan bir dinleyici başlatır.
+  * `hgs2-lab run`'ın hedefinin gerçekten yalıtılmış bir test sunucusu olduğunu Lab **kanıtlayamaz**: dinleyici
+    kimliği denetimi gerçek HGS2'yi (JVM) her portta reddeder, ama bildirilen bir dış sürecin (ör. `python.exe`)
+    gerçek sisteme iletmediğini kanıtlamaz. Gerçek HGS2'ye karşı test için HGS2 tarafında ayrı bir test profili, ayrı
+    test veritabanı ve doğrulanabilir bir kimlik işareti gerekir (uygulanmadı; bkz. "Gerçek HGS2 API sözleşmesi").
+    Bunlar tamamlanana kadar gerçek HGS2 testleri **engellidir**.
 * Yönlendirmeler izlenmez (`allow_redirects=False`); 3xx olduğu gibi raporlanır.
 * `trust_env=False`: ortam proxy'leri, `.netrc` ve CA ayarları okunmaz. Adaptör proxy kullanımını da reddeder;
   dışarıdan verilen bir `requests.Session` `trust_env=True` ise veya proxy içeriyorsa kabul edilmez.
@@ -276,7 +366,10 @@ Taşıma düzlemi ile HTTP düzlemi ayrıdır:
 
 * `elapsed_ms`: girişimden taşıyıcının sonuç döndürmesine veya hata vermesine kadar, monotonik saatle (`perf_counter_ns`).
 * `duration_ms`: HTTP yanıtı alındıysa HTTP süresi; taşıyıcı kendi değerini vermezse `elapsed_ms` kullanılır.
-* `business_outcome`: ileride HGS2 yanıt gövdesinden doldurulacak; şimdilik boş.
+* `business_outcome`: yanıt gövdesinden çıkarılan, tanınan iş sonucu değeri (`ONAYLANDI`, `REDDEDILDI`, `OK`, `HATA`,
+  `NONE`, `SCAN_CARD`, `SCAN_FP`, `SCAN_SCHOOL_NO`, `WAITING`, `READY`, `KAYDEDILDI`; bkz. "Gerçek HGS2 API
+  sözleşmesi"); tanınmazsa veya gövde ayrıştırılamazsa boş. Gövdenin kendisi yazılmaz (bkz. "Yanıt
+  ayrıştırma ve iş sonucu"). Bu alanı dolduran sürümden önce yazılmış dosyalarda her zaman boştur.
 * `error`: hata mesajı; hassas sorgu değerleri, URL parolaları ve isteğin hassas header değerleri maskelenir.
 
 ## HTTP taşıyıcısı ve ölçüm sınırları
@@ -286,7 +379,9 @@ Taşıma düzlemi ile HTTP düzlemi ayrıdır:
 1. **Hazırlık (ölçüm dışı):** metot, timeout ve hedef (metin + ad çözümlemesi) doğrulanır; `body` varsa JSON olarak
    serileştirilir (`Content-Type: application/json`, senaryo kendi değerini vermediyse).
 2. **İstek:** `session.request(..., stream=True, allow_redirects=False, timeout=timeout_seconds)`.
-3. **Gövde:** `response.content` ile yanıt gövdesinin tamamı okunur, ardından yanıt kapatılır.
+3. **Gövde:** `response.content` ile yanıt gövdesinin tamamı okunur, ardından yanıt kapatılır. Gövde ve
+   `Content-Type` başlığı runner'a taşınır; runner, süre ölçümü bittikten **sonra** gövdeyi iş sonucu için
+   ayrıştırır (ölçüme dahil değildir; bkz. "Yanıt ayrıştırma ve iş sonucu").
 
 | Alan | Başlangıç | Bitiş |
 |---|---|---|
@@ -326,8 +421,9 @@ Yazım önce geçici dosyalara yapılır, sonra atomik olarak yayımlanır.
 * Yeni bir ana sürüm eklendiğinde eski sürümler okunmaya devam eder: eski kayıtlar açık bir dönüştürücüyle yeni modele
   yükseltilir ve sürüm `READABLE_SCHEMA_VERSIONS`'a eklenir. Dönüştürücüsüz sürüm eklenmez.
 * `schema_version` tam sayı olmalıdır: `"2"`, `2.0` ve `true` reddedilir.
-* **Şema v3'e geçilmedi**: istek düzeyinde yeni alan gerekmedi. Saat çapası (`clock`), veri türü (`dataset_kind`) ve
-  sentetik deney kimliği (`synthetic`) metadata anahtarı olarak eklendi. Sentetik etiketler bilinçli olarak sonuç
+* **Şema v3'e geçilmedi**: istek düzeyinde yeni alan gerekmedi. Saat çapası (`clock`), veri türü (`dataset_kind`),
+  sentetik deney kimliği (`synthetic`) ve yanıt ayrıştırma özetleri (`response_parsing`) metadata anahtarı olarak
+  eklendi; iş sonucu mevcut `business_outcome` alanına yazılır. Sentetik etiketler bilinçli olarak sonuç
   dosyalarına değil ayrı dosyalara yazılır (bkz. "Sentetik deneyler").
 * Uyumluluk, `tests/golden/` altındaki gerçek eski yazıcılarla üretilmiş dosyalarla sınanır (bkz. `tests/golden/README.md`).
   a1331fd'nin okuyucusunun (`ResultStore.load_json/load_csv`) yeni yazılan dosyaları `clock` anahtarıyla birlikte
@@ -352,13 +448,24 @@ Yazım önce geçici dosyalara yapılır, sonra atomik olarak yayımlanır.
 | `inputs` | Yapılandırma/senaryo dosya adları (yol değil), orijinal baytların SHA-256 özeti, `hash_errors` |
 | `config` | `base_url`, `timeout_seconds`; `output_dir` ve `scenarios_file` yalnızca ad olarak |
 | `scenarios` | Senaryoların maskelenmiş görüntüsü |
+| `response_parsing` | Yanıt ayrıştırıcısının sürümü, `max_parse_bytes`, tanınan iş sonucu değerleri, kural sayıları ve HTTP yanıtı alınan her istek için `seq` + özet (durum kodu, medya türü, gövde durumu, bayt sayısı, kural, iş sonucu, uyarılar). Gövde içeriği yoktur. Bu alandan önce yazılmış dosyalarda yoktur |
 
 **Gizlilik:**
 
 * Adı hassas görünen header/body alanları ve sorgu parametreleri (`token`, `access_token`, `api_key`, `apikey`,
   `password`, `passwd`, `secret`, `authorization`, `cookie`, `session` vb.; büyük/küçük harf duyarsız) `***REDACTED***`
   olarak yazılır. URL'nin path kısmı ve hassas olmayan parametreleri olduğu gibi korunur.
-* Hata mesajlarında ve `execution.message` alanında da aynı maskeleme uygulanır.
+* Kişisel veri ve bağlantı alanları da hassastır: HGS2 parametreleri `kartNo`, `ogrenciNo`/`öğrenciNo`, `parmakIzi`
+  (ve `kart_no`, `KARTNO`, `parmakIziId` gibi varyasyonları), `cardNumber`, `studentId`, `fingerprint`, biyometri,
+  `tcKimlikNo`/`tckn`, `connectionString`, `dsn`, `jdbcUrl`, `datasource.url`. Değer kısmen gösterilmez; tamamı maskelenir.
+  `deviceId`, `kartTipi`, `ogrenciSayisi` gibi benzer görünen alanlar maskelenmez.
+* Hata mesajlarında ve `execution.message` alanında da aynı maskeleme uygulanır. Serbest metinde (`sanitize_text`)
+  `anahtar=değer` (tırnaklı değer dahil), `"anahtar": değer`, `anahtar: değer` (log/header satırı), `Bearer`/`Basic`
+  kimlik bilgileri, URL kullanıcı bilgisi parolası ve `jdbc:`/`postgresql://` gibi bağlantı URL'leri maskelenir. Java sınıf
+  adları ve `Dosya.java:45` satır numaraları korunur. Yapılandırılmış veride (`sanitize_data`, `sanitize_json_text`)
+  maskeleme JSON yapısı üzerinden yapılır: hassas anahtarın değeri iç içe nesne veya liste olsa da bütünüyle maskelenir.
+  Form gövdeleri için `sanitize_form` vardır. Bozuk JSON metin kurallarına düşer; desteklenmeyen tür `TypeError` verir ve
+  hata mesajına değer yazılmaz.
 * Metadata mutlak yerel yol içermez. Dosya içerikleri metadata'ya kopyalanmaz.
 * Maskeleme anahtar adına dayanır: masum adlı bir alana yazılmış gizli değer maskelenmez. Senaryo dosyalarına gerçek
   parola veya token yazmayın.
@@ -1270,6 +1377,943 @@ Kalibrasyon: train'in 21 çalıştırmasından 585 normal satır; medyan 1,146 m
 * Dedektör özellik tablosunun kendi manifestini ve özetlerini doğrular. Kampanya kataloğunu yeniden doğrulamaz; bu,
   tablo üretilirken `dataset features` tarafından yapılır.
 
+## Test sonucu analizi: TestRecord, JUnit/Surefire ayrıştırıcısı ve kural sınıflandırıcı
+
+**Amaç:** test çıktılarını ortak bir modele dönüştürmek ve her sonucu, kararının gerekçesini ve kanıtlarını göstererek
+sınıflandırmak. Makine öğrenmesi yoktur; harici servis ve ağ erişimi yoktur. Kurallar yalnızca sentetik fikstürlerle
+sınanmıştır. Gerçek HGS2'den bugün yalnızca bir başarılı JUnit testi vardır; hata örneği yoktur. Bu nedenle kuralların
+gerçek HGS2 hatalarındaki doğruluğu **ölçülmemiştir**.
+
+```
+hgs2-lab junit classify --report target/surefire-reports/TEST-x.xml --dataset-kind real --output work/x.classification.json
+```
+
+Akış: rapor dosyası → `junit_report.parse_junit_report` → `TestRecord` (maskeleme kurulumda uygulanır) →
+`classify.classify_record` → `build_junit_document` → JSON. Çıktının üzerine yazılmaz. Python içinden Lab'in kendi istek
+sonuçları da sınıflandırılabilir: `records.record_from_raw_result(raw, dataset_kind=..., expected=ExpectedResult(...))`.
+
+### TestRecord (`records.py`, `RECORD_SCHEMA_VERSION = 2`)
+
+| Grup | Alanlar |
+|---|---|
+| Zorunlu | `record_id`, `source_type` (`junit_xml`, `lab_result`), `dataset_kind` (`real`, `synthetic`, `fixture`, `unknown`), `test_outcome` |
+| Kimlik / kaynak | `run_id`, `source_file` (yalnızca dosya adı), `source_sha256`, `test_id`, `test_name`, `suite_name`, `scenario_id`, `timestamp` |
+| Beklenen / gözlenen | `expected_result` (`status_codes`, `business_outcomes`, `description`, `expected_test_outcome`, `expected_transport`, `provenance`; `null` = bilinmiyor), `status_code`, `business_outcome`, `duration_ms`, `transport_error` |
+| Hata | `exception_type`, `error_message`, `stack_trace` |
+| Etiket ve kalite | `label` + `label_source` (`synthetic_plan`, `human_review`; ikisi birlikte; model tahmini buraya yazılmaz), `data_quality_status` (`valid`, `partial`, `contradictory`, `invalid`), `warnings` (kod listesi) |
+| Analiz | `analysis`: `classification`, `rule_ids`, `reason`, `evidence[]` (`field`, `value`, `source`, `note`), `confidence`, `requires_review`, `warnings`, `limitations`, `classifier_version` |
+
+* `test_outcome` **kaynağın** kararıdır: JUnit için `PASS`/`FAIL`/`ERROR`/`SKIPPED`/`UNKNOWN`; Lab sonucu için HTTP durum
+  denetimi (`http_ok`). `analysis.classification` ise **analiz motorunun** kararıdır. Analiz kaynak sonucu değiştirmez.
+* Kaynakta olmayan değer uydurulmaz; bilinmeyen değer `null` olur. Geçersiz değerler (negatif/sonsuz süre, bilinmeyen
+  enum, yol içeren `source_file`, 100–599 dışı durum kodu) `RecordError` verir. Hata mesajları alan değerini içermez.
+* Maskeleme sınırı modelin kendisidir. Serbest metin alanları, beklenen sonuç açıklaması, kanıt değerleri ve gerekçe
+  kurulum sırasında maskelenir. Bu yüzden `to_dict`/`to_json` hiçbir zaman maskelenmemiş değer üretmez. `from_dict`
+  ve `from_json` gidiş-dönüşü kaydı aynen geri kurar; bilinmeyen anahtar reddedilir.
+* `business_outcome` alanını kaynak sağlar: JUnit raporunda yoktur; Lab sonuçlarında yanıt ayrıştırıcısı doldurur.
+  `record_from_raw_result(..., parsed=...)` ayrıştırma kuralını ve uyarılarını `response_rule:<kural>` ve
+  `response_<uyarı>` kodlarıyla kaydın `warnings` alanına ekler. Bozuk JSON, çözülemeyen metin veya geçersiz durum
+  kodunda kalite `partial` olur. Özet sonuç kaydıyla uyuşmazsa `RecordError` verilir.
+
+### JUnit/Surefire ayrıştırıcısı (`junit_report.py`)
+
+| Rapordaki öğe | `test_outcome` |
+|---|---|
+| sonuç öğesi yok | `PASS` (`flakyFailure`/`flakyError` varsa `flaky_rerun_passed` uyarısı) |
+| `<failure>` / `<error>` / `<skipped>` | `FAIL` / `ERROR` / `SKIPPED` |
+| farklı türler birlikte (ör. `<failure>` + `<skipped>`) | `UNKNOWN`, `data_quality_status = contradictory` |
+
+* `<testsuites>` ve `<testsuite>` kökleri, birden çok ve iç içe suite, boş suite ve XML ad alanları desteklenir.
+  `failure`/`error` öğesinin `type` özniteliği `exception_type` olur; `type` yoksa iz metninin ilk satırı kullanılır ve
+  `exception_type_from_trace` uyarısı eklenir. `message` özniteliği `error_message`, öğe metni `stack_trace` olur.
+  Mesaj 4 000 karakterde, iz 200 satır / 32 000 karakterde kırpılır ve kırpma bir uyarıyla bildirilir.
+* `time` saniyedir. Eksikse `duration_missing` uyarısı verilir; negatif, sonsuz, sayı olmayan veya virgüllü değer
+  `invalid_duration` + `partial` olur. Virgüllü değer tahmin edilmez, çünkü binlik ayırıcı mı ondalık virgül mü olduğu
+  bilinemez.
+* Suite özeti, beyan edilen sayıları (`tests`/`failures`/`errors`/`skipped`) kayıtlardan sayılanlarla karşılaştırır ve
+  uyuşmazlığı `declared_count_mismatch:<alan>` uyarısıyla bildirir.
+* **Okunmayan bölümler:** `<properties>` (JVM/sistem özellikleri gizli değer içerebilir), `<system-out>` ve
+  `<system-err>` (testin yakaladığı log çıktısı). İçerikleri kayda alınmaz; yalnızca sayıları
+  `ignored_sections` alanında bildirilir. Tek istisna, testcase düzeyindeki `hgs2_lab.scenario_id` özelliğidir
+  (bkz. "Toplu JUnit analizi"). JUnit raporu uygulamanın tüm loglarını içermez; ayrı log dosyaları bu
+  ayrıştırıcının kapsamı dışındadır.
+* **Güvenlik:** dosya en çok 32 MiB olabilir. DOCTYPE veya varlık (entity) bildirimi içeren XML ayrıştırılmadan
+  reddedilir (`unsafe_xml`); böylece harici varlık (XXE) ve varlık genişletme engellenir. İçerik çalıştırılmaz.
+  Dosya düzeyindeki hata kodları: `not_found`, `unreadable`, `empty`, `too_large`, `unsafe_xml`, `malformed_xml`,
+  `unsupported_format`. Hata mesajı dosya içeriğinden alıntı veya yerel yol içermez. Birden çok rapor verildiğinde
+  hatalı dosya listelenir ve diğerleri işlenmeye devam eder.
+
+### Sınıflandırıcı (`classify.py`, `rules-v3`)
+
+`rules-v2` (N11), `rules-v1`'e tek bir kural ekledi: yalnızca durum kodu (ya da yalnızca "yanıt alınır") beklentisi
+**2xx** bir yanıtla karşılandığında gövdeden tanınan bir iş sonucu çıkarılamadıysa (ayrıştırma kuralı
+`R-TEXT-UNRECOGNIZED`, `R-JSON-UNRECOGNIZED`, `R-MALFORMED-JSON`, `R-UNDECODABLE` veya `R-UNSUPPORTED-TYPE`) karar
+`PASS` değil `INCONCLUSIVE`'dir (`H-STATUS-OK-UNKNOWN-BODY`, `business_outcome_unrecognized`, inceleme gerekir).
+
+`rules-v3` (N12, denetim bulgusu F-1) aynı koşulda (2xx + iş sonucu beklentisi yok) gövde hakkında güvenilir kanıt
+olmayan ya da gövdesi yalnızca bir ara durum bildiren yanıtları da `PASS` saymaz; hepsi `INCONCLUSIVE`, `confidence`
+yok, inceleme gerekir ve `business_expectation_missing` uyarısı taşır:
+
+| Kural | Koşul | Uyarı |
+|---|---|---|
+| `H-STATUS-OK-EMPTY-BODY` | Gövde boş (`R-EMPTY-BODY`) ve durum kodu gövdesiz yanıt tanımlamıyor (204/205 dışında) | `response_body_empty` |
+| `H-STATUS-OK-BODY-NOT-PARSED` | Gövde ayrıştırılmadı: 4 KiB'tan büyük (`R-TOO-LARGE`) ya da taşıyıcı vermedi (`R-BODY-NOT-CAPTURED`) | `response_body_not_parsed` |
+| `H-STATUS-OK-BODY-UNVERIFIED` | Lab kaydında ayrıştırma özeti yok (`response_parsing_unavailable` / `_missing` / `_invalid`; eski dosya ya da bozuk metadata). Sonuç dosyasında iş sonucu yazılı olsa bile gövdenin incelendiği kanıtlanamaz | `response_parsing_not_available` |
+| `H-STATUS-OK-STATE-BODY` | Gövde bir ara durum: `WAITING`, `READY`, `NONE`, `SCAN_CARD`, `SCAN_FP`, `SCAN_SCHOOL_NO` (`STATE_BUSINESS_OUTCOMES`). Bunlar iş başarısı ya da kimlik doğrulama onayı değildir | `business_outcome_state_only` |
+
+Değişmeyenler: 204/205 + boş gövde (ör. HGS2 `DELETE /api/sensor/session`) `PASS` (`H-STATUS-MATCH`, `medium`)
+kalır; olumlu iş sonucu (`ONAYLANDI`, `OK`, `KAYDEDILDI`) + yalnızca durum kodu beklentisi `PASS` (`medium`,
+`business_outcome_not_checked`) kalır; beklenen 3xx/4xx/5xx kararı durum koduna dayanır (gövde kuralları yalnızca
+2xx'te); iş sonucu beklentisi tanımlı kayıtlar ve JUnit kayıtları etkilenmez. Ara durumlar açık bir iş sonucu
+beklentisiyle (`"business_outcomes": ["WAITING", "READY"]`) `PASS` olabilir. Bilinen sınır: 200 ile gerçekten boş
+gövde dönen bir uç için "boş gövde beklenir" diye bir beklenti alanı yoktur; böyle bir uç `INCONCLUSIVE` kalır (HGS2
+sözleşmesinde böyle bir uç bulunmadı).
+
+| Sınıf | Ne zaman | Örnek kural |
+|---|---|---|
+| `PASS` | JUnit testi geçti; ya da gözlenen yanıt açıkça tanımlı beklentiyi karşıladı | `J-PASS`, `H-EXPECTED-MATCH`, `H-STATUS-MATCH` |
+| `APPLICATION_FAILURE` | Beklenti açıkken durum kodu veya iş sonucu uymadı; ya da JUnit assertion başarısız oldu | `H-STATUS-MISMATCH`, `H-BUSINESS-MISMATCH`, `J-ASSERTION` |
+| `TRANSPORT_FAILURE` | Bağlantı veya taşıma hatası kaydedildi | `H-TRANSPORT`, `J-TRANSPORT` |
+| `TIMEOUT` | Zaman aşımı kaydedildi | `H-TIMEOUT`, `J-TIMEOUT-TYPE`, `J-TIMEOUT-MESSAGE` |
+| `TEST_INFRASTRUCTURE_FAILURE` | Test bağlamı veya ortamı başlatılamadı (`Failed to load ApplicationContext`, `BeanCreationException`, `NoClassDefFoundError`, havuz/JDBC bağlantısı …) | `J-INFRA` |
+| `INVALID_TEST_DATA` | Kayıt geçersiz işaretlendi | `DQ-INVALID` |
+| `INCONCLUSIVE` | Kanıt yetersiz veya çelişkili; daha fazla bilgiyle karar verilebilir | `H-NO-EXPECTATION`, `H-BUSINESS-MISSING`, `H-STATUS-OK-NEGATIVE-BODY`, `H-STATUS-OK-UNKNOWN-BODY`, `H-STATUS-OK-EMPTY-BODY`, `H-STATUS-OK-BODY-NOT-PARSED`, `H-STATUS-OK-BODY-UNVERIFIED`, `H-STATUS-OK-STATE-BODY`, `J-SKIPPED`, `DQ-CONTRADICTORY`, `H-CONFLICT-*` |
+| `UNKNOWN` | Bu kayıt türü için kural yok (ör. tanınmayan istisnayla JUnit `error`) | `J-ERROR-UNRECOGNIZED`, `J-UNKNOWN-OUTCOME` |
+
+Temel ilkeler (her biri testle sınanır):
+
+* **HTTP 200 tek başına iş başarısı değildir.** HGS2'nin kimlik doğrulama ve terminal uçları sonucu düz metin gövdeyle
+  bildirir (`ONAYLANDI`, `REDDEDILDI`, `OK`, `HATA`), durum kodu her zaman 200'dür (HGS2 kaynak kodundan statik
+  olarak). Gövde değeri her zaman beklenen iş sonucuyla karşılaştırılır:
+  * Beklenen sonuç `REDDEDILDI` olan bir negatif testte gövde `REDDEDILDI` ise karar `PASS` olur.
+  * Beklenen sonuç `ONAYLANDI` iken gövde `REDDEDILDI` ise karar `APPLICATION_FAILURE` olur.
+  * Beklenen sonuç bilinmiyorsa, durum kodu ve gövde ne olursa olsun karar `INCONCLUSIVE` olur.
+  * İş sonucu bekleniyor ama gövdeden iş sonucu yoksa karar `INCONCLUSIVE` olur.
+  * Yalnızca durum kodu bekleniyorsa ve durum kodu tutuyorsa karar ancak gövde ayrıştırılıp olumlu bir iş sonucu
+    taşıyorsa (ya da yanıt 204/205 ise) `PASS` olur; güven düzeyi `medium` kalır ve `business_outcome_not_checked`
+    uyarısı eklenir. 2xx gövdesi olumsuz (`H-STATUS-OK-NEGATIVE-BODY`), tanınmayan (`H-STATUS-OK-UNKNOWN-BODY`),
+    boş (`H-STATUS-OK-EMPTY-BODY`), ayrıştırılmamış (`H-STATUS-OK-BODY-NOT-PARSED`), ara durum
+    (`H-STATUS-OK-STATE-BODY`) ya da ayrıştırma özeti yoksa (`H-STATUS-OK-BODY-UNVERIFIED`) karar `INCONCLUSIVE`'dir
+    (`rules-v3`). Beklenen durum kodu tek başına iş başarısını kanıtlamaz.
+  * Sensör durumları (`WAITING`, `READY`, `NONE`, `SCAN_*`) olumsuz iş sonucu değildir ve kimlik doğrulama onayı da
+    değildir: beklenen `ONAYLANDI` iken gözlenen `READY` veya `WAITING` bir uyuşmazlıktır (`H-BUSINESS-MISMATCH`);
+    yalnızca durum kodu beklentisiyle de `PASS` olmaz (`H-STATUS-OK-STATE-BODY`).
+* Kaynak `FAIL`/`ERROR` diyorsa analiz `PASS` vermez (`H-CONFLICT-SOURCE-OUTCOME` → `INCONCLUSIVE`). `SKIPPED` başarılı
+  sayılmaz.
+* JUnit `FAIL` → `APPLICATION_FAILURE`; güven düzeyi `medium` olur ve şu sınırlama eklenir: "testin kendisinin hatalı
+  olması dışlanamaz".
+* JUnit `ERROR` istisna zincirine göre değerlendirilir: üst istisna ve izdeki `Caused by:` türleri. Altyapı bağlamı
+  zaman aşımına, zaman aşımı taşıma hatasına göre önceliklidir.
+* Zaman aşımı ve taşıma hataları uygulama hatası sayılmaz ve kök neden uydurulmaz. "Veritabanı yavaş" gibi bir neden
+  ancak ölçülmüşse söylenebilir.
+* `502`/`503`/`504` uyuşmazlığı ağ geçidi kaynaklı olabileceği için incelemeye işaretlenir.
+* **Güven düzeyi** (`confidence`) olasılık değildir. Kararın dayandığı kanıtın türünü gösterir:
+  * `high`: doğrudan ve çelişkisiz kanıta dayanan deterministik kural.
+  * `medium`: kısmi denetim veya yorum.
+  * `low`: yalnızca mesajdaki metin kalıbı.
+  * `null`: `INCONCLUSIVE` ve `UNKNOWN` kararları.
+* **F5 ile ayrım:** sınıflandırıcı `duration_ms` değerini ve F5 çıktısını kullanmaz. Gecikme anomalisi ayrı bir
+  eksendir: yavaş bir yanıt işlevsel olarak `PASS` olabilir; HTTP 200 ile dönen bir iş hatası gecikme anomalisi
+  olmadan görülebilir.
+
+Çıktı belgesi (`format: hgs2-lab-test-classification`, `document_schema_version: 1`): `sources` (dosya adı, SHA-256,
+suite özetleri), `file_errors`, `summary` (sınıf ve kaynak sonuç sayıları, inceleme gerektirenler), `notes`, `records`.
+`content_sha256`, `generated_at` dışındaki içeriğin özetidir; aynı girdiler aynı özeti verir.
+
+**Sınırlamalar:**
+
+* Gerçek HGS2 hatalarıyla doğrulanmadı.
+* İstisna adı tabloları sınırlıdır; tanınmayan türler `UNKNOWN` olur.
+* JUnit `<system-out>` logları ayrıştırılmaz.
+* Spring Boot log dosyası ve JSONL ayrıştırıcısı yoktur.
+* Makine öğrenmesi sınıflandırıcısı için gerçek HGS2'den bağımsız hata olaylarından oluşan, insan tarafından
+  etiketlenmiş bir korpus gerekir: her sınıfta en az birkaç düzine olay ve olay bazlı gruplama. Bu korpus bugün yoktur.
+
+### Yanıt ayrıştırma ve iş sonucu (`response_parser.py`, `result_analysis.py`)
+
+**Amaç:** HGS2'nin bazı uçları sonucu durum kodunda değil gövdede bildirir. Kimlik doğrulama ve terminal uçları,
+hem kabul hem ret için HTTP 200 + düz metin döndürür (HGS2 kaynak kodunda salt okunur olarak görüldü). Ayrıştırıcı
+gövdeden **yalnızca açıkça yazan** iş sonucunu çıkarır. Anlamını (beklenen ret mi, hata mı) belirlemez; anlam,
+sınıflandırıcıda beklenen sonuçla karşılaştırılarak verilir. Gerçek HGS2 uçlarına karşı hiçbir doğrulama yapılmadı;
+tüm uçların desteklendiği iddia edilmez.
+
+Akış:
+
+```
+run / synthetic run: istek → RequestsTransport (gövde + Content-Type) → süre ölçümü biter → parse_response
+                     → RawResult.business_outcome (yalnızca tanınan değer) + metadata.response_parsing (özet)
+results classify:    sonuç dosyaları + response_parsing + beklenti dosyası → TestRecord → classify (N4) → JSON
+```
+
+**Tanınan iş sonucu değerleri** (`response-parser-v2`, N11): `ONAYLANDI`, `REDDEDILDI`, `OK`, `HATA`, `NONE`,
+`SCAN_CARD`, `SCAN_FP`, `SCAN_SCHOOL_NO` (düz metin) ve `WAITING`, `READY` (JSON `status` alanı). Kaynakları ve
+anlamları için bkz. "Gerçek HGS2 API sözleşmesi". `KAYDEDILDI` HGS2'nin HTTP yanıtlarında yoktur (yalnızca
+veritabanındaki `logs.sonuc` değeridir); `response-parser-v1` ile yazılmış kayıtlar ve beklentilerle uyum için
+tanınmaya devam eder. Değerler yalnızca metin olarak tanınır; her uçta aynı anlama geldikleri varsayılmaz.
+Karşılaştırmada büyük/küçük harf ve baştaki/sondaki boşluk yok sayılır. Alt dize araması yapılmaz:
+`ISLEM REDDEDILDI` tanınmaz.
+
+| Kural | Koşul | `business_outcome` |
+|---|---|---|
+| `R-TEXT-TOKEN` | `text/plain` (ya da içerik türü yok + `content_type_missing` uyarısı) ve gövdenin tamamı tanınan bir değer | değer |
+| `R-JSON-STRING` | `application/json` / `+json` ve gövde tek bir JSON metni (`"REDDEDILDI"`) | değer |
+| `R-JSON-FIELD` | JSON nesnesinin **üst düzey** `business_outcome` alanı tanınan bir değer. Bu, Lab'in kendi sözleşmesidir; HGS2'de böyle bir alan yoktur | değer |
+| `R-JSON-STATUS` | `business_outcome` alanı yok; **üst düzey** `status` alanı metin ve `WAITING` ya da `READY` (HGS2 `GET /api/sensor/result`). `value` alanı okunmaz ve yazılmaz | değer |
+| `R-TEXT-UNRECOGNIZED`, `R-JSON-UNRECOGNIZED` | Okunabildi ama tanınan değer yok. Eşanlamlı veya iç içe alan aranmaz; tanınmayan metin `status` değeri `status_field_unrecognized`, sayısal `status` (ör. Spring hata gövdesi) tanınmaz | boş |
+| `R-EMPTY-BODY`, `R-BODY-NOT-CAPTURED`, `R-NO-RESPONSE` | Gövde boş / taşıyıcı vermedi / taşıma hatası | boş |
+| `R-TOO-LARGE` | Gövde `MAX_PARSE_BYTES` = 4096 bayttan büyük; **ayrıştırılmaz** (`body_too_large_not_parsed`). Ölçüm gövdenin tamamını okumaya devam eder | boş |
+| `R-UNSUPPORTED-TYPE` | Metin veya JSON dışı içerik türü (`text/html`, `application/octet-stream` …) | boş |
+| `R-UNDECODABLE` | Bilinmeyen veya metin olmayan charset, ya da çözülemeyen bayt | boş |
+| `R-MALFORMED-JSON` | JSON içerik türü ama geçersiz JSON (`malformed_json`). İstek başarısız sayılmaz | boş |
+
+Geçersiz veya eksik durum kodu `invalid_status_code` / `status_code_missing` uyarısı verir; gövde yine ayrıştırılır.
+Ayrıştırıcı hiçbir girdide istisna fırlatmaz. HTTP durum kodu, iş sonucu ve taşıma hatası ayrı alanlarda kalır.
+
+**Gizlilik:** ayrıştırma özeti yalnızca medya türünü, bayt sayısını, kuralı, uyarıları ve izin listesindeki iş sonucu
+değerini taşır. Gövdenin kendisi, bir kısmı veya hash'i hiçbir dosyaya, loga, gerekçeye ya da kanıta yazılmaz.
+Hash de yazılmaz, çünkü düşük entropili kişisel değerler hash'ten geri bulunabilir.
+
+**Beklenti dosyası** (`results classify --expectations`; bilinmeyen anahtar reddedilir). Önerilen biçim, sürüm 2
+beklenti sözleşmesidir (bkz. "Beklenti sözleşmesi"). Aşağıdaki sürüm 1 biçimi geriye uyum için desteklenir; doğrulama
+durumu ve kanıt taşımaz, bu yüzden kararlarda `expectation_verification_unspecified` uyarısı bulunur:
+
+```json
+{"expectations_version": 1,
+ "scenarios": {"kart-pasif-cihaz": {"status_codes": [200], "business_outcomes": ["REDDEDILDI"],
+                                    "description": "pasif cihazda kart reddedilmeli"}}}
+```
+
+Sürüm 1 dosyasında veya hiç dosya verilmediğinde beklenti şu sırayla aranır:
+
+1. Beklenti dosyası.
+2. Senaryonun açıkça yazılmış `expected_status` listesi (metadata'dan; boş liste beklenti sayılmaz).
+3. Hiçbiri yoksa beklenti `null` olur ve karar `INCONCLUSIVE` verilir.
+
+Sürüm 2 sözleşmesi verildiğinde yalnızca sözleşme kullanılır. Eşleşme yoksa başka bir kaynağa geri düşülmez.
+
+Isınma istekleri sınıflandırılmaz. Çalıştırmada bulunmayan senaryolar için yazılmış beklentiler `unused_expectations`
+altında listelenir. `response_parsing` içermeyen eski dosyalarda kayıtlar `response_parsing_unavailable` uyarısı
+taşır. Özet sonuç kaydıyla tutarsızsa kayıt `invalid` işaretlenir (`INVALID_TEST_DATA`).
+
+Davranış (sentetik testlerle doğrulandı; gerçek HGS2 davranışını tanımlamaz):
+
+| HTTP | Gövde | Beklenen | Sınıf (kural) |
+|---|---|---|---|
+| 200 | `REDDEDILDI` | ret | `PASS` (`H-EXPECTED-MATCH`) |
+| 200 | `REDDEDILDI` | kabul | `APPLICATION_FAILURE` (`H-BUSINESS-MISMATCH`) |
+| 200 | `REDDEDILDI` | bilinmiyor | `INCONCLUSIVE` (`H-NO-EXPECTATION`) |
+| 200 | boş / bozuk JSON / desteklenmeyen tür / çok büyük | iş sonucu bekleniyor | `INCONCLUSIVE` (`H-BUSINESS-MISSING`), ayrıştırma uyarısı kanıtta |
+| 200 | boş | yalnızca durum kodu | `INCONCLUSIVE` (`H-STATUS-OK-EMPTY-BODY`; `rules-v3`) |
+| 204 | boş | yalnızca durum kodu 204 | `PASS` (`H-STATUS-MATCH`, `medium`) |
+| 200 | 4 KiB'tan büyük | yalnızca durum kodu | `INCONCLUSIVE` (`H-STATUS-OK-BODY-NOT-PARSED`; `rules-v3`) |
+| 200 | herhangi; metadata'da ayrıştırma özeti eksik/bozuk | yalnızca durum kodu | `INCONCLUSIVE` (`H-STATUS-OK-BODY-UNVERIFIED`; `rules-v3`) |
+| 200 | `ONAYLANDI` / `OK` | yalnızca durum kodu | `PASS` (`H-STATUS-MATCH`, `medium`, `business_outcome_not_checked`) |
+| 200 | `WAITING` / `READY` / `NONE` / `SCAN_*` | yalnızca durum kodu | `INCONCLUSIVE` (`H-STATUS-OK-STATE-BODY`; `rules-v3`) |
+| 200 | tanınmayan metin / tanınmayan JSON (ör. `{"sessionId": …}`) / bozuk JSON / desteklenmeyen tür | yalnızca durum kodu | `INCONCLUSIVE` (`H-STATUS-OK-UNKNOWN-BODY`; `rules-v2`) |
+| 200 | `REDDEDILDI` / `HATA` | yalnızca durum kodu | `INCONCLUSIVE` (`H-STATUS-OK-NEGATIVE-BODY`) |
+| 200 | `{"status":"WAITING"}` / `{"status":"READY",…}` | `WAITING` veya `READY` | `PASS` (`H-EXPECTED-MATCH`) |
+| 200 | `{"status":"READY",…}` / `{"status":"WAITING"}` | kabul (`ONAYLANDI`) | `APPLICATION_FAILURE` (`H-BUSINESS-MISMATCH`) |
+| 200 | `NONE` | `NONE` | `PASS` (`H-EXPECTED-MATCH`) |
+| 400 | Spring biçimli hata JSON'u | yalnızca durum kodu 400 | `PASS` (`H-STATUS-MATCH`, `medium`); 2xx olmadığı için `H-STATUS-OK-UNKNOWN-BODY` uygulanmaz |
+| 500 | `HATA` | 200 + kabul | `APPLICATION_FAILURE` (`H-STATUS-AND-BUSINESS-MISMATCH`) |
+| — | zaman aşımı | herhangi | `TIMEOUT` (`H-TIMEOUT`) |
+| — | bağlantı koptu | herhangi | `TRANSPORT_FAILURE` (`H-TRANSPORT`) |
+
+Örnek çıktı kaydı (kısaltılmış; sentetik):
+
+```json
+{"scenario_id": "kart-gecerli", "test_outcome": "PASS", "status_code": 200, "business_outcome": "REDDEDILDI",
+ "expected_result": {"status_codes": [200], "business_outcomes": ["ONAYLANDI"], "description": "geçerli kart"},
+ "warnings": ["response_rule:R-TEXT-TOKEN"],
+ "analysis": {"classification": "APPLICATION_FAILURE", "rule_ids": ["H-BUSINESS-MISMATCH"],
+              "reason": "Gözlenen yanıt açıkça tanımlı beklentiyi karşılamadı.", "confidence": "high",
+              "requires_review": false, "warnings": ["source_outcome_differs"],
+              "evidence": [{"field": "status_code", "value": 200, "source": "record", "note": null},
+                           {"field": "business_outcome", "value": "REDDEDILDI", "source": "record", "note": null},
+                           {"field": "response_parsing", "value": ["response_rule:R-TEXT-TOKEN"], "source": "record", "note": null},
+                           {"field": "business_outcome", "value": "REDDEDILDI", "source": "rule", "note": "beklenen ['ONAYLANDI']"}]}}
+```
+
+`test_outcome` burada Lab'in HTTP durum denetimidir ve `PASS`'tir (200 beklenen durum). Analiz ise iş sonucuna
+bakarak `APPLICATION_FAILURE` der. İki alan ayrı tutulur; `source_outcome_differs` uyarısı bunu işaretler.
+
+**Sınırlamalar:**
+
+* İzin listesi HGS2 kaynak kodundaki sabitlerden alındı. Uç bazında anlamı doğrulanmadı.
+* Sentetik sunucunun gövdeleri (`synthetic ok`) iş sonucu değildir. Sentetik deney çıktılarında `business_outcome`
+  boş kalır (doğrulandı).
+* JSON'da yalnızca Lab'in `business_outcome` alanı, HGS2 sensör sonucunun `status` alanı (`WAITING`/`READY`) ve tek
+  metin gövde desteklenir. HGS2'nin diğer JSON uçları (ör. kullanıcı listesi, `POST /api/sensor/start`'ın
+  `sessionId` yanıtı, `{"error": …}`) iş sonucu taşımaz; yalnızca durum kodu beklentisiyle 2xx ise `INCONCLUSIVE` olur.
+* Gövde 4 KiB'tan büyükse ayrıştırılmaz.
+* Ayrıştırma, istekler arasına çok kısa bir işlem süresi ekler (`elapsed_ms`/`duration_ms` dışında).
+
+### Beklenti sözleşmesi (`expectations.py`, `expectations_version: 2`)
+
+**Amaç:** testin hangi davranışı beklediğini, bu beklentinin hangi kaynağa dayandığını ve ne ölçüde doğrulandığını
+izlenebilir biçimde kaydetmek, ardından bunu kayıtlarla güvenli biçimde eşleştirip N4'e aktarmak. Bu bir altyapıdır;
+gerçek HGS2 iş kurallarını içermez. Gerçek HGS2 için doğrulanmış bir beklenti tablosu **yoktur**.
+
+```json
+{"expectations_version": 2, "registry_id": "lab-sentetik",
+ "evidence": [{"evidence_id": "ev-1", "source_type": "approved_business_rule", "source_ref": "IS-KURALI-12",
+               "location": "madde 3", "supports": ["http_status", "business_outcome"],
+               "review_status": "REVIEWED", "relation": "supports", "source_version": "v4", "description": "…"}],
+ "expectations": [{"expectation_id": "exp-kart-pasif", "version": 1, "scenario_id": "kart-pasif-cihaz",
+                   "endpoint_id": "POST /api/auth/kart-okut", "status": "VERIFIED", "scope": "real",
+                   "expected_http_status": [200], "expected_business_outcome": ["REDDEDILDI"],
+                   "expected_test_outcome": "PASS", "expected_transport": "response",
+                   "evidence_ids": ["ev-1"], "description": "…"}]}
+```
+
+**Beklenti alanları.** Zorunlu alanlar: `expectation_id` (değişmez kimlik), `version`, `scenario_id`, `status` ve
+`scope` (`synthetic` | `real`). Beklenen alanların hepsi isteğe bağlıdır; bilinmeyen alan `null` bırakılır. Varsayılan
+olarak başarı üretilmez. En az bir beklenen alan olmalıdır: `expected_http_status`, `expected_business_outcome`,
+`expected_transport` veya `expected_test_outcome`. Yalnızca `expected_test_outcome` içeren beklenti JUnit kayıtları
+içindir; HTTP kayıtlarında karar üretmez.
+
+- `expected_business_outcome` yalnızca yanıt ayrıştırıcısının tanıdığı değerleri alabilir.
+- `expected_test_outcome` yalnızca kanıt olarak karşılaştırılır; kaynak sonucunu değiştirmez ve karar üretmez.
+- Bir taşıma hatası beklenirken (`timeout` …) durum kodu, iş sonucu veya kaynak `PASS` beklenemez (çelişki).
+- Yinelenen liste değerleri reddedilir.
+- Bir HTTP durum kodunun hangi iş sonucuna karşılık geldiği varsayılmaz.
+
+**Doğrulama durumu.**
+
+| Durum | Anlamı |
+|---|---|
+| `DRAFT` | Taslak; kanıt gerekmez. |
+| `REVIEWED` | İncelenmiş; doğrulama kapsamı sınırlı. En az bir kanıt referansı gerekir. |
+| `VERIFIED` | Belirtilen kapsamda, kayıtlı kanıtla desteklenir. Gerçek dünyanın tamamında doğruluk iddiası değildir. |
+| `DEPRECATED` | Eşleştirmede kullanılmaz. |
+
+Yalnızca `VERIFIED` doğrulanmış sayılır.
+
+**Kanıt referansları** (`EvidenceReference`).
+
+- **Alanlar:**
+  - `evidence_id`;
+  - `source_type`: `existing_test`, `source_code_review`, `official_documentation`, `approved_business_rule`, `synthetic_fixture`, `manual_review`, `unknown`;
+  - `source_ref`: kaynak tanımlayıcısı (belge kodu, test adı, depo içi göreli yol). Mutlak yerel yol reddedilir;
+  - `location`;
+  - `supports`: ilgili beklenti alanları;
+  - `review_status`: `UNREVIEWED` | `REVIEWED`;
+  - `relation`: `supports` | `contradicts`;
+  - `source_version`;
+  - `description`.
+- **İçerik kopyalanmaz:** kaynağın içeriği değil, yalnızca güvenli bir başvurusu tutulur.
+- **Referans inceleme demek değildir:** bir referansın bulunması içeriğin incelendiği anlamına gelmez; bunu `review_status` belirtir.
+- **Maskeleme:** metin alanları N1 maskelemesinden geçer.
+
+**Kanıt yeterliliği** (`assess_evidence`; deterministik). Bulgu kodları:
+
+- `no_evidence`
+- `evidence_unreviewed`
+- `unknown_source:<id>`
+- `non_verifying_source:<id>`
+- `contradicting_evidence:<id>`
+- `field_not_verified:<alan>`
+- `field_contradicted:<alan>`
+
+`VERIFIED` için beklenen her alan, en az bir **incelenmiş**, `supports` ilişkili ve kapsama uygun kaynak türündeki
+kanıtla desteklenmelidir. O alanı çürüten incelenmiş bir kanıt da olmamalıdır.
+
+| Kapsam | Doğrulayıcı kaynak türleri |
+|---|---|
+| `real` | `existing_test`, `official_documentation`, `approved_business_rule`, `manual_review` |
+| `synthetic` | `synthetic_fixture`, `existing_test`, `official_documentation`, `manual_review` |
+
+Kaynak kod incelemesinden çıkarılan bir varsayım onaylanmış iş kuralı sayılmaz. Sentetik fikstür de gerçek davranışı
+doğrulamaz. Bu yüzden bu iki tür `real` kapsamında `VERIFIED` yapamaz.
+
+**Registry davranışı.**
+
+- **Kısmi kabul yok:** dosya yalnızca okunur. Tek bir şema, kimlik, kanıt veya durum hatası bile tüm dosyanın
+  reddedilmesine yol açar ve bütün bulgular (`issues`) listelenir. Hata mesajları değer veya yerel yol içermez.
+- **Kimlikler:** `expectation_id` ve `evidence_id` benzersiz olmalıdır; tanımsız kanıt kimliğine başvuru hatadır.
+- **Gerekçelendirilemeyen VERIFIED:** dosya reddedilir; durum sessizce düşürülmez.
+- **Çelişkiler:** aynı `scenario_id` için birden fazla etkin (DEPRECATED olmayan) beklenti dosyayı geçersiz kılmaz,
+  ama `conflicts` altında raporlanır.
+- **Determinizm:** sıralama `(scenario_id, expectation_id)` ile yapılır. `content_sha256`, girdi dosyasındaki
+  sıradan bağımsızdır.
+- **Bozuk dosyalar:** boş, bozuk, bulunamayan veya yanlış sürümlü dosyada varsayılan iş kuralına geçilmez;
+  komut 1 ile çıkar.
+
+**Eşleştirme.** Kaydın `scenario_id` değeriyle birebir ve büyük/küçük harfe duyarlı yapılır. `endpoint_id` yalnızca
+açıklayıcıdır, eşleştirmede kullanılmaz (kayıtlarda güvenilir bir uç kimliği yoktur). Sonuçlar:
+
+| Sonuç | Kayda eklenen uyarı |
+|---|---|
+| `matched` | — |
+| `not_found` | `expectation_not_found` |
+| `conflict` | `expectation_conflict` (hiçbiri seçilmez) |
+| `deprecated_only` | `expectation_deprecated_only` |
+| `no_scenario_id` | `expectation_no_scenario_id` |
+
+Eşleşen beklenti kayda `expected_result.provenance` ile bağlanır: kaynak, kimlik, sürüm, doğrulama durumu, kapsam,
+kanıt kimlikleri ve kanıt yeterliliği bulguları.
+
+**N4 ile entegrasyon.** Mevcut kurallar aynen çalışır; beklenti sözleşmesi yalnızca kararın kesinliğini belirler.
+
+| Durum | Karar |
+|---|---|
+| Beklenti yok / bulunamadı / yalnızca DEPRECATED | `INCONCLUSIVE` (`H-NO-EXPECTATION`) + eşleşme uyarısı |
+| Aynı senaryo için birden fazla etkin beklenti | `INCONCLUSIVE` (`E-EXPECTATION-CONFLICT`) |
+| `DRAFT` / `REVIEWED` beklenti, karar PASS veya APPLICATION_FAILURE olurdu | `INCONCLUSIVE` (`E-UNVERIFIED-EXPECTATION` + temel kural); olası sonuç `comparison` kanıtında (`would_be`) |
+| `VERIFIED` ama kapsam kaydın veri türüyle eşleşmiyor (`real` ↔ `real`; `synthetic` ↔ `synthetic`/`fixture`) | `INCONCLUSIVE` (`E-SCOPE-MISMATCH`; veri türü `unknown` ise `E-SCOPE-UNCONFIRMED`) |
+| `VERIFIED` ve kapsam uygun | Mevcut N4 kuralları (`H-EXPECTED-MATCH`, `H-BUSINESS-MISMATCH`, …) + "yalnızca bu kapsamda doğrulandı" sınırlaması |
+| Taşıma hatası beklenirken HTTP yanıtı geldi | `APPLICATION_FAILURE` (`H-TRANSPORT-MISMATCH`; beklenti doğrulanmamışsa INCONCLUSIVE) |
+| Zaman aşımı / bağlantı kopması | `TIMEOUT` / `TRANSPORT_FAILURE` (gözlemdir, beklentiden bağımsız) + `transport_matches_expectation` / `transport_differs_from_expectation` |
+| Eski biçim (sürüm 1) veya senaryo `expected_status` | Önceki davranış + `expectation_verification_unspecified` |
+
+Değişmeyen ilkeler:
+
+- Kaynak `FAIL`/`ERROR` hiçbir zaman PASS'a çevrilmez.
+- `SKIPPED` başarılı sayılmaz.
+- HTTP 200 tek başına iş başarısı değildir.
+
+Kararda beklenti `expectation` kanıtı olarak görünür. Güven düzeyinin anlamı değişmedi: doğrulama durumu, kanıtın
+niteliği ve güven düzeyi ayrı kavramlardır; yeni bir puan eklenmedi.
+
+**Kullanım:**
+
+```
+hgs2-lab expectations validate --file beklentiler.json
+hgs2-lab expectations show     --file beklentiler.json --scenario kart-pasif-cihaz
+hgs2-lab results classify --run-id RUN --results-dir DİZİN --expectations beklentiler.json \
+                          --dataset-kind synthetic --output RUN.classification.json
+```
+
+**Fikstürler** (`tests/fixtures/expectations/`):
+
+- `synthetic-registry.json`: sözleşmenin bütün durumlarını içeren sentetik registry.
+- `hgs2-draft-example.json`: gerçek HGS2 için yalnızca **taslak** bir örnek. Tek kanıtı, HGS2 `AuthController`
+  kaynak koduna yapılmış incelenmemiş bir referanstır; bu yüzden `VERIFIED` yapılamaz.
+
+**Sınırlamalar:**
+
+- Gerçek HGS2 için kaynakla desteklenmiş, doğrulanmış bir beklenti yoktur.
+- Kanıt yeterliliği, kanıt metninin içeriğini değil, beyan edilen meta veriyi (tür, inceleme, kapsam, ilişki)
+  denetler. İncelemenin gerçekten yapıldığı kullanıcının beyanıdır.
+- JUnit kayıtları yalnızca testcase özelliği `hgs2_lab.scenario_id` ile eşleştirilir (bkz. "Toplu JUnit analizi").
+- Uç (`endpoint_id`) veya test adına göre eşleştirme yoktur.
+
+### Toplu JUnit analizi (`junit_analysis.py`, `junit classify --expectations`)
+
+**Amaç:** birden fazla JUnit/Surefire raporunu tek seferde işlemek. Raporlar mevcut ayrıştırıcıyla okunur,
+`TestRecord`'a dönüştürülür, isteğe bağlı olarak beklenti sözleşmesiyle eşleştirilir, mevcut N4 sınıflandırıcısıyla
+yorumlanır ve sayaçlı tek bir JSON belgeye yazılır. Yeni bir XML ayrıştırıcısı, registry veya sınıflandırıcı yoktur.
+
+```
+hgs2-lab junit classify --report target/surefire-reports/TEST-a.xml --report target/surefire-reports/TEST-b.xml \
+                        --expectations beklentiler.json --dataset-kind synthetic --output analiz.json
+```
+
+**Senaryo kimliği nasıl tanımlanır?** Testcase düzeyindeki `<properties>` öğesindeki tek bir açık özellikle. Özellik
+adı Lab'in sözleşmesidir, JUnit standardı tanımlamaz. pytest 9.1.1 `record_property` bu yapıyı üretir (yerel olarak
+doğrulandı). Maven Surefire/JUnit 5'in testcase düzeyinde özellik üretip üretmediği **doğrulanmadı** (bkz. "Gerçek
+HGS2 entegrasyon hazırlığı"):
+
+```xml
+<testcase name="kartPasifCihaz" classname="com.example.lab.KartTests" time="0.010">
+  <properties><property name="hgs2_lab.scenario_id" value="kart-pasif-cihaz"/></properties>
+</testcase>
+```
+
+- **Değerin yeri:** `value` özniteliğinde ya da öğe metninde olabilir.
+- **Biçim:** harf/rakamla başlar; yalnızca harf, rakam, `.`, `_`, `-` içerir (en çok 64 karakter).
+- **Kimlik yoksa:** `scenario_id = null` olur.
+- **Hatalı kimlik:** geçersiz değer `scenario_id_invalid`, aynı testte farklı değerler `scenario_id_conflict`
+  uyarısı verir; hiçbiri seçilmez. Aynı değerin tekrarı `scenario_id_repeated` uyarısıyla kabul edilir.
+- **Okunmayanlar:** suite düzeyindeki özellikler ve başka adlı özellikler okunmaz.
+- **Türetme yok:** test metodu, sınıf, suite veya uç adından kimlik **türetilmez**.
+- **Kayıt korunur:** kimlik sorunu kaydın kaynak sonucunu değiştirmez ve kaydı silmez.
+
+**Eşleştirme.** Kaydın `scenario_id` değeriyle birebir yapılır. Beklenti dosyası sürüm 2 (registry) ya da sürüm 1
+olabilir.
+`--scenario-map` verilirse kimlik önce metadata ve eşleme dosyasından çözülür (bkz. "Senaryo eşleştirme ve uçtan uca
+kabul (N10)").
+
+| Durum | Davranış |
+|---|---|
+| Kimlik yok | `no_scenario_id` |
+| Beklenti bulunamadı | `not_found` |
+| Yalnızca DEPRECATED beklenti var | `deprecated_only` |
+| Birden fazla etkin beklenti | `conflict`; hiçbiri seçilmez ve kayıt incelemeye düşer |
+
+Bu durumların hepsinde kayıt aynen korunur; yalnızca `expectation_<durum>` uyarısı eklenir. Geçersiz, eksik veya
+bozuk beklenti dosyası komutu 1 ile durdurur ve hiçbir şey yazılmaz. Geçerli kısımlarla kısmi analiz yapılmaz.
+Beklenti dosyası verilmezse analiz açıkça "beklentisiz" olarak işaretlenir.
+
+**JUnit kararı ve beklenti.** Karar her zaman kaynak test sonucundan gelir ve mevcut J-* kuralları kullanılır:
+
+| Kaynak sonuç | Karar |
+|---|---|
+| PASS | `PASS` + "uygulamanın genel olarak hatasız olduğunu göstermez" sınırlaması |
+| FAIL | `APPLICATION_FAILURE` (medium) + "testin kendisinin hatalı olması dışlanamaz" sınırlaması |
+| ERROR | İstisna zincirine göre `TIMEOUT` / `TRANSPORT_FAILURE` / `TEST_INFRASTRUCTURE_FAILURE` / `UNKNOWN` / `INCONCLUSIVE` |
+| SKIPPED | `INCONCLUSIVE` |
+
+Beklenti bu kararı **değiştirmez**; yalnızca karara kanıt ve uyarı ekler:
+
+- **`expectation` kanıtı:** kaynak, kimlik, sürüm, doğrulama durumu ve kapsam.
+- **`expectation_comparison` kanıtı:** alan bazında `match` / `differs` / `not_observable` / `not_specified`. JUnit
+  kaydında HTTP durumu, iş sonucu ve taşıma bilgisi olmadığı için bu alanların beklentileri karşılaştırılamaz:
+  `not_observable` olur ve `expectation_not_observable_in_junit` uyarısı eklenir.
+- **Kaynak sonuç karşılaştırması:** `test_outcome_matches_expectation` / `test_outcome_differs_from_expectation`.
+- **DRAFT / REVIEWED beklenti:** `expectation_unverified`.
+- **Kapsam uyuşmazlığı:** sentetik kapsamdaki beklenti `real` veya `unknown` kayıtta kullanıldığında
+  `expectation_scope_mismatch`.
+
+Böylece kaynak FAIL hiçbir zaman PASS'a çevrilmez, SKIPPED başarılı sayılmaz ve taslak beklenti bir teşhis gerekçesi
+olmaz.
+
+**Toplu girdi davranışı.**
+
+- Her rapor ayrı okunur. Bozuk, boş, eksik, XXE içeren veya JUnit olmayan dosya diğerlerini durdurmaz;
+  `file_errors` altında kod ve mesajla listelenir.
+- Bayt bayt aynı içerikli bir rapor ikinci kez verilirse yeniden işlenmez ve `duplicate_reports` altında listelenir.
+  Bu güvenilir bir tekilleştirmedir: aynı içerik aynı kayıt kimliklerini üretir.
+- Farklı raporlarda aynı `test_id` görülürse kayıtlar **birleştirilmez**; `possible_duplicate_tests` altında
+  raporlanır.
+
+**JSON sayaçları** (`classification.summary`; tanımları belgede `counter_definitions` altında):
+
+| Sayaç | Hangi küme üzerinden |
+|---|---|
+| `files_given` / `files_parsed` / `files_rejected` / `files_duplicate` | Verilen yollar. `files_given = files_parsed + files_rejected + files_duplicate`; reddedilen dosya analiz edilmiş sayılmaz |
+| `suites` | Ayrıştırılan raporlardaki `<testsuite>` sayısı (bir rapor birden çok suite içerebilir; boş suite dahil) |
+| `records` | Ayrıştırılan testcase kayıtları; her kayıt tam olarak bir sınıfa düşer |
+| `by_test_outcome` | Kaynak raporun kendi sonucu; analiz sonucu değildir |
+| `by_classification` | N4 sınıfı. `INCONCLUSIVE` ve `UNKNOWN` PASS/FAIL toplamlarına eklenmez |
+| `requires_review` | İnceleme gerektiren kayıtlar; başarısızlık sayısı değildir |
+| `expectation_matching` | `requested`, `records_with_scenario_id` / `records_without_scenario_id`, `by_match_status`, `matched_by_verification_status` (eşleşme doğrulama demek değildir) |
+| `data_quality` | Kalite durumu dağılımı, uyarılı kayıt sayısı, suite uyarıları |
+| `possible_duplicate_tests` | Birden fazla kayıtta görülen `test_id`'ler |
+
+Kaynak PASS sayısı uygulamanın bütün olarak başarılı olduğunu göstermez; yalnızca rapordaki testlerin kendi
+sonucudur.
+
+**Fikstürler:**
+
+- `tests/fixtures/junit-n8/`: 14 testcase, 3 suite (biri boş).
+- `tests/fixtures/expectations/junit-registry.json`: sentetik kapsam.
+
+**Gerçek HGS2 ile sınırlar:**
+
+- Gerçek HGS2'nin tek mevcut raporu (`contextLoads`, PASS) senaryo kimliği içermez; bu yüzden beklentiyle
+  eşleşmez.
+- HGS2 testlerine `hgs2_lab.scenario_id` özelliği eklenmedikçe gerçek raporlar yalnızca beklentisiz analiz
+  edilebilir.
+- Gerçek HGS2 için doğrulanmış bir beklenti yoktur.
+
+## Gerçek HGS2 API sözleşmesi (kaynak koddan statik; N11, 2026-10-29)
+
+**Kaynak:** gerçek HGS2 deposu (`hgs2`, HEAD `ad255a4`, çalışma ağacı temiz), yol
+`hgs2-main/HGS-main/HGS/src/main/java/com/HibritGirisSistemi/HGS/`. Yalnızca kaynak kodu okundu: HGS2 başlatılmadı,
+testleri çalıştırılmadı, API'sine istek gönderilmedi, PostgreSQL'e bağlanılmadı. Projede DTO sınıfı yoktur; yanıtlar
+`String` ve `Map.of(...)` ile üretilir. "Kaynak" sütunu: **K** = HGS2 kaynak kodunda doğrudan görülüyor; **S** = Spring
+Boot'un varsayılan davranışı, HGS2 kodunda tanımlı değil, **doğrulanmadı**.
+
+| Metot ve yol | Parametreler (gövde yok; query/form) | Yanıt (durum, içerik türü, gövde) | İş sonucu | Yan etki | Kaynak |
+|---|---|---|---|---|---|
+| `POST /api/auth/kart-okut` | `kartNo` (metin), `deviceId` (tam sayı) | 200, `text/plain;charset=UTF-8`, `ONAYLANDI` veya `REDDEDILDI` | başarı `ONAYLANDI`; ret `REDDEDILDI` (pasif/kayıtsız cihaz veya kullanıcı dahil) | **Her çağrıda `logs` tablosuna 1 satır.** Açık bir sensör oturumunu cihaza bakmadan doldurabilir (bellek) | K (`AuthController.kartOkut`, `islemYap`) |
+| `POST /api/auth/numara-okut` | `ogrenciNo`, `deviceId` | aynı | aynı | aynı | K |
+| `POST /api/auth/parmak-izi-okut` | `parmakIzi` (slot), `deviceId` | aynı | aynı | aynı | K |
+| `POST /api/terminal/kart-kaydet` | `deviceId`, `ogrenciNo`, `kartNo` | 200, `text/plain;charset=UTF-8`, `OK` veya `HATA` | başarı `OK`; her iş hatası `HATA` (neden ayırt edilmez) | `users` UPDATE + `logs` INSERT (`@Transactional`) | K (`TerminalEnrollmentService`) |
+| `POST /api/terminal/parmak-kaydet` | `deviceId`, `ogrenciNo`, `slot` | aynı | aynı | aynı | K |
+| `POST /api/terminal/ogrenci-no-degistir` | `deviceId`, `eskiNo`, `yeniNo` | aynı | aynı | aynı | K |
+| `POST /api/terminal/ogrenci-kaydet` | `deviceId`, `ogrenciNo` | aynı | `OK` (kayıt zaten varsa yazmadan `OK`) / `HATA` | `users` + `logs` INSERT | K |
+| `POST /api/sensor/start` | `type` (`CARD`/`FINGERPRINT`/`SCHOOL_NO`), `deviceId` (isteğe bağlı, varsayılan 1) | 200 JSON `{"sessionId": "<12 karakter>"}`; geçersiz tipte 400 JSON `{"error": "Gecersiz tip: …"}` | iş sonucu yok (tanınmaz) | bellekte oturum; 180 sn'den eski oturumları yalnızca burada temizler | K |
+| `GET /api/sensor/pending` | `deviceId` | 200, düz `String`: `NONE`, `SCAN_CARD`, `SCAN_FP` veya `SCAN_SCHOOL_NO` | `NONE` = bekleyen tarama yok; `SCAN_*` = tarama isteniyor | yok (okuma) | K (`SensorCaptureService.getPendingAction`); içerik türü `produces` ile tanımlı değil (**S**: istemcinin `Accept` başlığına göre `text/plain` beklenir, doğrulanmadı) |
+| `GET /api/sensor/result` | `sessionId` | 200 JSON `{"status":"WAITING"}` veya `{"status":"READY","value":"<yakalanan değer>"}` | `WAITING` = henüz yok (hata değil); `READY` = sensör değeri hazır (**kimlik doğrulama onayı değil**). Bilinmeyen/silinmiş oturumda da `WAITING` (404 yok) | yok | K |
+| `DELETE /api/sensor/session` | `sessionId` | 204, gövde yok | — | oturumu siler (yoksa da 204) | K |
+| `GET/POST/PUT/DELETE /api/users[/{id}]`, `/api/devices[/{id}]`, `GET /api/logs` | JSON gövde (`User`/`Device`) | 200 JSON varlık/liste; kullanıcıda iş kuralı ihlali 400 `{"error": …}` | iş sonucu yok | CRUD; kullanıcı silme logları da siler | K |
+| tümü: eksik/yanlış tipte parametre | — | 400 + Spring hata gövdesi | — | — | **S** |
+| tümü: veritabanı hatası, `aciklama` (255) taşması vb. | — | 500 + Spring hata gövdesi; log yazılmayabilir | — | — | **S** (HGS2'de `@ControllerAdvice` yok) |
+
+Önemli sonuçlar:
+
+* **HTTP 200 iş başarısı değildir:** ret (`REDDEDILDI`) ve iş hatası (`HATA`) de 200 ile döner.
+* **Kimlik doğrulama uçları salt okunur değildir:** her çağrı log yazar; test yalnızca yalıtılmış test veritabanına
+  karşı yapılabilir. Hiçbir HGS2 ucu tekrar güvenli (idempotent) varsayılmamalıdır.
+* **Kimlik doğrulama yoktur:** tüm uçlar `@CrossOrigin("*")` ve `server.address=0.0.0.0`.
+
+**HGS2 tarafında test yalıtımı için öneri (UYGULANMADI; HGS2 kaynak kodu değiştirilmedi):** HGS2'nin tek testi
+(`HgsApplicationTests.contextLoads`, `@SpringBootTest`) `application.properties` ile gerçek
+`jdbc:postgresql://localhost:5432/hibrit_giris_db` veritabanına bağlanır ve `ddl-auto=update` ile şema değiştirir
+(mevcut Surefire raporunda `create table`/`alter table` satırları görülür). Ayrı bir uygulama aşamasında önerilenler:
+
+1. `src/test/resources/application-test.properties` (ya da Testcontainers): ayrı veritabanı URL'si, ayrı kullanıcı,
+   `spring.jpa.hibernate.ddl-auto=create-drop`; test sınıflarında `@ActiveProfiles("test")`.
+2. Ana `application.properties`'teki parolayı ortam değişkenine taşımak (`${HGS_DB_PASSWORD}`) ve
+   `ddl-auto=validate` (ya da Flyway/Liquibase).
+3. Test profilinde farklı `server.port` (ör. `18080`) ve yalnızca `127.0.0.1`'e bind; Lab'in hedef kimliğini
+   doğrulayabilmesi için test profiline özgü salt okunur bir işaret ucu (ör. `GET /api/test-profile` → profil adı).
+4. Bunlar uygulanıp gerçek veritabanına dokunulmadığı kanıtlanmadan hiçbir HGS2 testi çalıştırılmamalıdır.
+
+## Gerçek HGS2 entegrasyon hazırlığı (`readiness.py`, `ingestion.py`)
+
+**Bu bölüm bir hazırlık katmanını anlatır; gerçek HGS2 ile hiçbir doğrulama yapılmadı.** Lab gerçek HGS2'ye
+bağlanmaz, HGS2 testlerini çalıştırmaz, veritabanına veya cihazlara erişmez. Aşağıdaki denetimler yalnızca verilen
+dosyaları ve Lab'in kendi bileşenlerini çevrimdışı çalıştırır.
+
+### Mevcut HGS2 raporlarında hangi alanlar var?
+
+Gerçek HGS2'nin bugün erişilebilir tek test raporu Maven Surefire çıktısıdır (`TEST-…HgsApplicationTests.xml`, şema
+`surefire-test-report.xsd` sürüm 3.0.2). Raporda tek bir test vardır (`contextLoads`, PASS). Rapor salt okunur
+incelendi; `readiness check` envanteri:
+
+| Alan | Durum |
+|---|---|
+| Test sınıfı, test adı, kaynak sonuç, süre | `available` |
+| Hata türü, mesaj, stack trace | `not_applicable` (FAIL/ERROR kaydı yok) |
+| Suite meta verisi (ad, süre, beyan edilen sayılar) | `available`; zaman damgası yok |
+| `<properties>` (suite düzeyi, JVM/sistem özellikleri) | `withheld_for_security`: gizli değer içerebileceği için okunmaz |
+| `system-out` / `system-err` | `present_not_parsed`: test logu ayrıştırılmaz |
+| Senaryo kimliği (`hgs2_lab.scenario_id`) | `missing` |
+| Beklenen sonuç, HTTP durumu, iş sonucu | `not_in_format`: JUnit/Surefire biçiminde böyle alanlar yok |
+
+Envanter durumları:
+
+| Durum | Anlamı |
+|---|---|
+| `available` | İlgili kayıtların hepsinde var |
+| `partial` | Bazı kayıtlarda var |
+| `missing` | Bu biçimde olabilirdi ama raporda yok |
+| `not_applicable` | Alanın anlamlı olacağı kayıt yok |
+| `present_not_parsed` | Raporda var ama okunmuyor |
+| `withheld_for_security` | Bilinçli olarak okunmuyor |
+| `not_in_format` | Biçimde böyle bir alan yok |
+
+Envanter değer içermez; yalnızca durum ve sayıları gösterir.
+
+### Senaryo kimliği sözleşmesi
+
+- **Kaynak:** `hgs2_lab.scenario_id`, testcase düzeyindeki `<properties>` içinde açık bir özelliktir. Lab'in
+  sözleşmesidir; JUnit standardı tanımlamaz.
+- **Türetme yok:** test, sınıf, suite veya uç adından kimlik türetilmez. Adlar yeniden adlandırmayla değişebilir ve
+  bir adın hangi senaryoyu sınadığını kanıtlamaz; türetilmiş bir eşleşme yanlış beklentiyi sessizce bağlayabilir.
+- **Hatalı kimlik:**
+  - Geçersiz kimlik düzeltilmez (`scenario_id_invalid`).
+  - Çelişkili kimliklerden biri seçilmez (`scenario_id_conflict`).
+  - Kimlik yoksa kayıt korunur ve eşleştirilmez.
+- **Kimliği yazabilen araçlar:**
+
+  | Araç | Durum |
+  |---|---|
+  | pytest 9.1.1 `record_property` | Bu yapıyı ürettiği yerel olarak **doğrulandı** |
+  | Maven Surefire + JUnit 5 (HGS2'nin kullandığı Spring Boot test altyapısı) | Testcase düzeyinde özellik üretip üretmediği **doğrulanmadı** |
+  | HGS2'deki özel test yardımcısı | Yok; tek test sınıfı var |
+
+  HGS2 tarafında bir yol seçilip denenmeden gerçek raporların bu kimliği taşıyacağı varsayılmamalıdır.
+
+### Gerçek beklentiler ne zaman doğrulanmış sayılır?
+
+N7 kuralları aynen geçerlidir. `scope: real` olan bir beklentinin `VERIFIED` olabilmesi için beklenen her alanın en az
+bir **incelenmiş** (`review_status: REVIEWED`) kanıtla desteklenmesi gerekir. Kanıtın kaynak türü şunlardan biri
+olmalıdır: `existing_test`, `official_documentation`, `approved_business_rule` veya `manual_review`.
+
+- Kaynak kod incelemesi ve sentetik fikstür gerçek kapsamda doğrulayıcı sayılmaz.
+- Bir referansın bulunması içeriğin incelendiği anlamına gelmez.
+- Bir testin PASS olması test kapsamı dışındaki davranışı doğrulamaz.
+
+`readiness check`, her gerçek kapsam beklentisi için bir kontrol listesi üretir:
+
+- kimlik, sürüm ve senaryo;
+- tanımlı ve tanımsız (bilinmeyen) alanlar;
+- kanıt sayısı ve kanıt yeterliliği bulguları;
+- `VERIFIED` durumunu engelleyenler;
+- çelişki.
+
+### Önkoşul denetimi (`readiness check`)
+
+```
+hgs2-lab readiness check --report TEST-a.xml --expectations beklentiler.json --scope real --output hazirlik.json
+```
+
+| Grup | Denetimler (`fail` = engelleyici) |
+|---|---|
+| A. Rapor | A1 raporlar okunabiliyor (hiçbiri değilse fail), A2 kaynak sonuçlar belirlenebiliyor (kayıt yoksa fail), A3 senaryo kimliği kapsamı (hiç yoksa fail), A4 kimlik kalitesi, A5 ayrıştırma kalitesi |
+| B. Beklenti | B1 sürüm 2 sözleşmesi verildi ve geçerli (yoksa, geçersizse veya sürüm 1 ise fail), B2 çelişkili etkin beklenti, B3 kapsamda VERIFIED beklenti (hiç yoksa fail), B4 rapordaki kimliklerin kapsamdaki beklentilerle örtüşmesi (hiç yoksa fail), B5 kanıt bulguları |
+| C. Güvenlik | C1 N1 maskelemesi sentetik kanarya değerleri gizliyor, C2 XXE/DOCTYPE reddi, C3 suite/testcase özellikleri sızmıyor (yalnızca kimlik okunuyor), C4 çevrimdışı |
+| D. Hat | D1 ayrıştırıcı → senaryo çözümlemesi → eşleştirme → sınıflandırıcı → JSON çalışıyor ve sayaçlar tutarlı |
+| N10 (yalnızca `--scenario-map` ile) | A6 eşleme dosyası geçerli (geçersiz/eksik/bozuk/desteklenmeyen sürüm: fail; çelişkili eşleme: warn), C5 eşleme öz-testi (çelişki seçilmiyor, ad türetilmiyor, hassas tanımlayıcı sızmıyor). A3, A4 ve B4 çözümlenen kimliklerle hesaplanır |
+
+Sonucun yorumu:
+
+| Sonuç | Anlamı |
+|---|---|
+| `READY` | Bütün denetimler geçti |
+| `READY_WITH_WARNINGS` | Engelleyici yok, uyarı var |
+| `BLOCKED` | En az bir engelleyici var (`blocking` listesi) |
+
+**READY, HGS2'nin doğru çalıştığını veya beklentilerin gerçek dünyada doğru olduğunu göstermez.** Yalnızca bu
+önkoşulların karşılandığını gösterir. Dosyaların bulunması da iş kurallarının doğrulanması değildir.
+
+Bugünkü durumda gerçek HGS2 raporu için sonuç **BLOCKED**'dır. Nedenleri:
+
+- senaryo kimliği yok;
+- gerçek kapsamda doğrulanmış beklenti yok.
+
+### Veri alım sözleşmesi (`ingest analyze`, `ingestion_version: 1`)
+
+Gerçek hata örnekleri ileride elde edildiğinde mevcut hatta bu biçimle aktarılır. Yeni bir kayıt modeli yoktur;
+`record` alanı mevcut `TestRecord` sözlüğüdür (kayıt şeması 1 veya 2):
+
+```json
+{"ingestion_version": 1, "batch_id": "hgs2-hata-ornek", "dataset_kind": "real",
+ "entries": [{"source_record_id": "surefire-TEST-x#t1",
+              "source_reference": {"source_file": "TEST-x.xml", "source_sha256": "<64 hex>", "location": "t1"},
+              "test_scope": "kart okutma ret akışı",
+              "label_review": {"status": "REVIEWED", "evidence_ref": "INCELEME-12", "reviewer_role": "qa"},
+              "record": {"record_id": "r-1", "source_type": "junit_xml", "dataset_kind": "real",
+                         "test_outcome": "FAIL", "scenario_id": "kart-pasif-cihaz",
+                         "label": "APPLICATION_FAILURE", "label_source": "human_review"}}]}
+```
+
+Kurallar:
+
+- **Veri türü:** paketteki her kayıt aynı `dataset_kind` değerini taşır; gerçek ve sentetik kayıtlar karışamaz.
+  Gerçek pakette `synthetic_plan` etiketi reddedilir.
+- **Kaynak kimliği:** `source_record_id` zorunlu ve benzersizdir. Aynı kaynak kimliği veya aynı `record_id` ikinci
+  bağımsız örnek sayılmaz (`duplicates`).
+- **Etiket:** etiket ancak üç koşul birlikte sağlanırsa doğrulanmış (`human_review`) kabul edilir: `REVIEWED`
+  inceleme, `evidence_ref` ve `source_reference`. Aksi halde etiket kayıttan çıkarılır ve `proposed_label` olarak
+  raporlanır. Gerçek hata olduğu kanıtlanmamış bir kayıt gerçek hata diye etiketlenmez.
+- **Eksik alanlar:** bilinmeyen alanlar `null` kalır; kaynak sonuç `UNKNOWN` olabilir. Kaynak referansı yoksa
+  `source_reference_missing` uyarısı verilir.
+- **Maskeleme:** metinler N1 maskelemesinden geçer; çıktı ham gövde, log veya rapor içermez.
+- **Hatalı girdiler:** hatalı bir girdi diğerlerini durdurmaz (`ingestion_rejected`). Zarf geçersizse hiçbir şey
+  yazılmaz.
+- **Analiz:** kabul edilen kayıtlar isteğe bağlı beklentiyle eşleştirilir ve N4 ile sınıflandırılır. Kayıtta gömülü
+  bir `expected_result` varsa registry onu değiştirmez (`embedded_expected_result_kept`).
+
+## Senaryo eşleştirme ve uçtan uca kabul (N10; `scenario_mapping.py`)
+
+**Bu katman yalnızca sentetik raporlarla doğrulandı. Gerçek HGS2'ye bağlanılmadı, testleri çalıştırılmadı ve gerçek
+HGS2 için eşleme veya beklenti yazılmadı.**
+
+### Seçilen strateji
+
+İki açık kaynak birlikte kullanılır. Hiçbiri diğerine üstün sayılmaz.
+
+| Kaynak | Görevi | Durum |
+|---|---|---|
+| Testcase metadata'sı (`hgs2_lab.scenario_id`, N3) | Testin kendisi kimliğini rapora yazar | pytest ile doğrulandı; **Maven Surefire + JUnit 5 ile doğrulanmadı** |
+| Eşleme dosyası (`scenario_mapping_version: 1`) | Test kodu değiştirilmeden, rapordaki kararlı test tanımlayıcısını senaryoya bağlar | Sürümlü, denetlenebilir, Lab tarafında |
+
+Neden ikisi birden?
+
+- Gerçek HGS2 raporunda metadata yoktur ve Surefire'ın bu özelliği üretip üretmediği bilinmez. Yalnızca metadataya
+  dayanmak bugün hiçbir gerçek kaydı eşleştiremez.
+- Eşleme dosyası HGS2 kodunu değiştirmeden çalışır.
+- Metadata zaten N3'te uygulanmıştı. Ek maliyet yalnızca eşleme dosyası ve iki kaynağı birleştiren kuraldır.
+
+### Kararlı test tanımlayıcısı
+
+Tanımlayıcı, rapordaki testcase `classname` ve `name` özniteliklerinin birebir yazımıdır: `<classname>#<name>`.
+N3'ün `test_id` biçimiyle aynıdır.
+
+- **Yalnızca ikisi birlikte varsa** tanımlayıcı vardır. Sınıfsız veya adsız kayıt eşlenmez (`identifier_missing`).
+  Eksik sınıf adı suite adından **türetilmez**.
+- Maskeleme tanımlayıcıyı değiştirdiyse rapordaki gerçek ad bilinemez (`identifier_unstable`).
+- Benzerlik, önek, joker veya büyük/küçük harf duyarsız eşleştirme yapılmaz.
+- `record_id` tanımlayıcı olarak kullanılmaz. Rapor içeriğinin SHA-256'sından ve kaydın konumundan türetildiği için
+  her yeni çalıştırmada değişir.
+
+**Sınırlamalar:**
+
+- Test sınıfı veya metodu yeniden adlandırılırsa eşleme kaydı güncellenmelidir. Eski kayıt sessizce yeni teste
+  uygulanmaz; test `not_mapped` olur.
+- Parametreli testlerin adları (ör. `[1]`, `(String)`) çağrı sırasına veya araç sürümüne bağlı olabilir. Böyle adlar
+  zayıf tanımlayıcıdır.
+- Surefire'ın gerçek HGS2 raporlarında `name` özniteliğini nasıl yazdığı (ör. `contextLoads` / `contextLoads()`)
+  araç sürümüne göre değişebilir. Eşleme dosyası her zaman gerçek rapordan okunarak hazırlanmalıdır.
+
+### Eşleme dosyası şeması (`scenario_mapping_version: 1`)
+
+```json
+{"scenario_mapping_version": 1,
+ "mapping_set_id": "lab-n10-ornek",
+ "mappings": [
+   {"mapping_id": "map-kart-pasif", "test_class": "com.example.lab.KartTests", "test_name": "kartPasifCihaz",
+    "scenario_id": "kart-pasif-cihaz", "status": "ACTIVE", "evidence_ref": "N10-ESLEME-01",
+    "description": "Sentetik örnek"}
+ ]}
+```
+
+| Alan | Zorunlu | Kural |
+|---|---|---|
+| `scenario_mapping_version` | evet | Yalnızca `1`; başka sürüm reddedilir |
+| `mapping_set_id` | hayır | Güvenli kimlik |
+| `mappings[].mapping_id` | evet | Güvenli kimlik, dosyada benzersiz |
+| `mappings[].test_class` / `test_name` | evet | Rapordaki yazımla birebir. Baş/son boşluk ve kontrol karakteri içermez. `test_class` `#` içermez. Maskelenecek bir kalıp (ör. `token=…`) içeren tanımlayıcı reddedilir |
+| `mappings[].scenario_id` | evet | `hgs2_lab.scenario_id` ile aynı biçim |
+| `mappings[].status` | evet | `ACTIVE` veya `DEPRECATED` (DEPRECATED kayıt eşleştirmede kullanılmaz) |
+| `mappings[].evidence_ref` | hayır | Eşlemenin dayanağı; mutlak yerel yol olamaz, maskelenir |
+| `mappings[].description` | hayır | Maskelenir |
+
+Dosya doğrulaması N7 registry'si gibi bütünseldir. Tek bir hata bile dosyayı reddeder ve bütün bulgular
+listelenir. Kısmen yüklenmiş eşlemeyle analiz yapılmaz. Şu durumlarda dosya reddedilir:
+
+- dosya boş, bozuk JSON veya UTF-8 değil;
+- sürüm desteklenmiyor;
+- zorunlu alan eksik veya bilinmeyen alan var;
+- geçersiz kimlik;
+- yinelenen `mapping_id`;
+- **yinelenen eşleme**: aynı test için aynı senaryoya giden ikinci bir ACTIVE kayıt.
+
+Aynı test için **farklı** senaryolara giden ACTIVE kayıtlar dosyayı geçersiz kılmaz. `conflicts` altında raporlanır
+ve o test için kimlik seçilmez.
+
+```
+hgs2-lab scenario-map validate --file esleme.json
+```
+
+### Çözümleme: çakışma ve belirsizlik
+
+| `status` | `outcome` | Ne zaman | Kimlik |
+|---|---|---|---|
+| `metadata` | resolved | Yalnızca geçerli testcase özelliği | Özellik değeri |
+| `mapping` | resolved | Yalnızca ACTIVE eşleme (tek senaryo) | Eşleme değeri |
+| `metadata_and_mapping` | resolved | İkisi de var ve **aynı** | O kimlik |
+| `no_source` | not_found | Metadata yok, eşleme dosyası verilmedi | yok |
+| `not_mapped` | not_found | Metadata yok, eşleme dosyasında bu test yok | yok |
+| `deprecated_only` | not_found | Metadata yok, yalnızca DEPRECATED eşleme var | yok |
+| `identifier_missing` / `identifier_unstable` | ambiguous | Metadata yok; tanımlayıcı yok veya güvenilmez | yok |
+| `metadata_invalid` | ambiguous | Testcase özelliği geçersiz (eşleme varsa da kullanılmaz) | yok |
+| `metadata_conflict` | conflict | Aynı testte farklı özellik değerleri (N3) | yok |
+| `metadata_mapping_conflict` | conflict | Metadata ve eşleme **farklı** | yok |
+| `mapping_conflict` | conflict | Farklı senaryolara giden birden fazla ACTIVE eşleme | yok |
+
+`ambiguous` ve `conflict` kayıtlar incelemeye düşer (`requires_review`). Adaylar `candidate_scenario_ids` altında
+listelenir ama hiçbiri seçilmez. Öncelik kuralı yoktur: metadata eşlemeden, eşleme metadatadan üstün değildir.
+
+Eşleme dosyası verildiğinde her kayda `scenario_resolution:<status>` uyarısı eklenir ve `scenario_id` çözülen
+kimlik olur. Çözülemediyse `null` olur. Çelişkide mevcut N4 sözleşmesi gereği `scenario_id_conflict` de eklenir.
+Böylece sınıflandırıcı, beklenti istendiğinde kaydı kural değişikliği olmadan incelemeye düşürür. Kaynak test sonucu
+hiçbir durumda değişmez. Eşleme dosyası verilmezse kayıtlar N8'deki gibi aynen işlenir.
+
+### N7 registry'si ve N4 ile birleşme
+
+Akış:
+
+```
+JUnit/Surefire raporu → N3 ayrıştırıcı → TestRecord → senaryo çözümlemesi (metadata + eşleme dosyası)
+  → N7 registry eşleştirmesi → N4 sınıflandırıcı → JSON belge → readiness
+```
+
+Yeni bir beklenti sistemi veya sınıflandırma kuralı yoktur. N7 registry'si ve N4 kuralları değiştirilmedi.
+
+Belgedeki `scenario_trace` listesi her kayıt için şu katmanları **ayrı** alanlarda taşır:
+
+| Alan | Katman |
+|---|---|
+| `source_file`, `source_sha256`, `test_id`, `test_name` | Kaynak referansı (dosya adı + özet; yol yok) |
+| `source_test_outcome` | Kaynağın kendi sonucu; değişmez |
+| `scenario` | Çözümleme (`status`, `outcome`, `sources`, `mapping_ids`, adaylar, `requires_review`) |
+| `expectation` | Eşleşme durumu, beklenti kimliği ve sürümü, doğrulama durumu, kapsam, `scope_compatible` |
+| `decision_basis` | Beklentinin kesin karşılaştırmaya uygunluğu (aşağıda) |
+| `outcome_vs_expectation`, `expectation_assessment` | Kaynak sonucun beklenen sonuçla karşılaştırması |
+| `classification` | N4 kararı, kurallar, güven, gerekçe, uyarılar |
+| `requires_review`, `review_reasons` | Çözümleme veya N4 kaynaklı inceleme gereksinimi |
+
+`decision_basis` değerleri:
+
+| Değer | Anlamı |
+|---|---|
+| `no_scenario_id` | Kimlik çözülemedi; beklenti aranmadı |
+| `no_expectations` | Beklenti dosyası verilmedi |
+| `expectation_not_found` / `expectation_deprecated_only` / `expectation_conflict` | Kimlik var ama tek bir etkin beklenti yok |
+| `expectation_unverified` | DRAFT veya REVIEWED; kesin teşhis gerekçesi olamaz |
+| `expectation_verification_unspecified` | Sürüm 1 dosyası; doğrulama durumu yok |
+| `expectation_scope_mismatch` / `expectation_scope_unconfirmed` | Beklentinin kapsamı kaydın veri türüyle uyuşmuyor veya veri türü bilinmiyor |
+| `expectation_not_comparable` | Beklenti yalnızca HTTP durumu, iş sonucu veya taşıma tanımlıyor; JUnit kaydında gözlenemez |
+| `verified_expectation_in_scope` | VERIFIED, kapsamda ve karşılaştırılabilir |
+
+`expectation_assessment` değerleri:
+
+| Değer | Ne zaman |
+|---|---|
+| `consistent` | Uygun beklenti var ve kaynak sonuç beklenene eşit |
+| `inconsistent` | Uygun beklenti var ve kaynak sonuç farklı (ör. VERIFIED PASS beklentisi, kaynak FAIL) |
+| `undetermined` | Diğer her durum. Uygun beklenti yoksa, ya da test çalıştırılmadıysa (SKIPPED) veya sonucu bilinmiyorsa (UNKNOWN) |
+
+Bu değerlendirme N4 kararını **değiştirmez**:
+
+- kaynak FAIL hiçbir zaman PASS olmaz;
+- SKIPPED başarı sayılmaz;
+- beklenti bulunmaması iş başarısızlığı sayılmaz;
+- HTTP 200 veya iş sonucu JUnit kaydından uydurulmaz;
+- F5 anomali puanı kullanılmaz.
+
+### Kullanım (yalnızca sentetik veriyle)
+
+```
+hgs2-lab scenario-map validate --file tests/fixtures/scenario-mapping/n10-mapping.json
+hgs2-lab junit classify --report tests/fixtures/scenario-mapping/n10-report.xml \
+    --scenario-map tests/fixtures/scenario-mapping/n10-mapping.json \
+    --expectations tests/fixtures/scenario-mapping/n10-registry.json --dataset-kind synthetic --output n10.json
+hgs2-lab readiness check --report tests/fixtures/scenario-mapping/ready-unlabeled.xml \
+    --scenario-map tests/fixtures/scenario-mapping/ready-mapping.json \
+    --expectations tests/fixtures/readiness/ready-registry.json --scope synthetic
+```
+
+`junit classify` çıktısı, eşleme sayaçlarını ve beklenti uygunluğunu da yazdırır:
+
+- senaryo çözümlemesi (`mapping=9, metadata=1, …; inceleme gerektiren 4`);
+- beklenti uygunluğu;
+- değerlendirme dağılımı.
+
+Belgedeki ek alanlar:
+
+| Alan | İçerik |
+|---|---|
+| `classification.summary.scenario_resolution` | `by_status`, `by_outcome`, `by_source`, `requires_review`, `by_decision_basis`, `by_expectation_assessment` |
+| `classification.scenario_mapping` | Dosya adı, SHA-256 ve kanonik `content_sha256` |
+| `classification.scenario_trace` | Kayıt başına iz |
+
+**Determinizm.** Aynı girdiler aynı `content_sha256`'yı üretir. Eşleme dosyasındaki kayıt sırası çözümlemeyi ve
+kanonik `content_sha256`'yı değiştirmez. Rapor sırası kayıt başına sonuçları ve sayaçları değiştirmez. Belgedeki
+`records` ve `scenario_trace` listeleri ise N8 sözleşmesi gereği girdi sırasını izler; bu yüzden farklı rapor
+sırası farklı belge özeti verebilir.
+
+### Readiness'e etkisi
+
+`readiness check --scenario-map` verildiğinde:
+
+- A3 (kimlik kapsamı), A4 (kimlik kalitesi) ve B4 (beklenti örtüşmesi) çözülen kimliklerle hesaplanır;
+- A4 metadata/eşleme çelişkisini, çoklu eşlemeyi ve tanımlayıcı eksikliğini ayrı sayar;
+- A6 eşleme dosyasını denetler: geçersiz, eksik veya desteklenmeyen sürüm `fail`, çelişkili eşleme `warn` olur;
+  rapordaki testlere karşılık gelmeyen ACTIVE kayıtlar listelenir;
+- C5 eşleme öz-testini çalıştırır;
+- D1 ayrıntılarına çözümleme sonucu, karar dayanağı ve değerlendirme dağılımı eklenir.
+
+Eşleme dosyası verilmezse denetim kümesi N9 ile aynıdır.
+
+### Sentetik ve gerçek kapsam
+
+`ready-unlabeled.xml` + `ready-mapping.json` sentetik kapsamda READY verir. Aynı dosyalar gerçek kapsamda BLOCKED
+kalır. Eşleme dosyası yalnızca "hangi test hangi senaryodur" sorusunu yanıtlar. Hiçbir beklentiyi doğrulamaz.
+Sentetik kapsamdaki VERIFIED beklenti gerçek veya bilinmeyen veri türündeki kayıtta kesin karşılaştırmaya
+kullanılmaz (`expectation_scope_mismatch` / `expectation_scope_unconfirmed`).
+
+### Gerçek entegrasyon ne zaman BLOCKED kalır?
+
+Aşağıdakilerden biri eksik olduğu sürece gerçek kapsamda sonuç BLOCKED'dır. Bugün hepsi eksiktir:
+
+1. **Senaryo kimliği.** Gerçek HGS2 raporundaki testler için ya Surefire + JUnit 5'in `hgs2_lab.scenario_id`
+   özelliğini ürettiği gerçek bir raporla doğrulanmalı, ya da gerçek rapordaki `classname`/`name` değerlerinden
+   hazırlanmış, gerekçesi (`evidence_ref`) olan bir eşleme dosyası yazılmalıdır. Bugünkü tek gerçek test
+   (`contextLoads`) bir bağlam yükleme testidir; hangi senaryoyu sınadığına ancak HGS2 tarafında karar verilebilir.
+2. **Gerçek kapsamda VERIFIED beklenti.** N7 kurallarına göre incelenmiş, doğrulayıcı kaynaklı kanıtlar gerekir
+   (resmî belge, onaylı iş kuralı, mevcut test veya el ile inceleme; kaynak kod incelemesi ve sentetik fikstür
+   sayılmaz).
+3. **Örtüşme.** Rapordaki çözülen kimliklerin gerçek kapsamdaki etkin beklentilerle örtüşmesi (B4).
+
+Sentetik testler bu eksikleri dolduramaz.
+
 ## Testler
 
 | Amaç | Komut |
@@ -1359,17 +2403,210 @@ Analiz katmanı testleri (birim):
   tüm senaryoların desteklenip `confirmed` etiket üretmesi, sayımların katalog/sonuç/etiket/veri seti/CSV arasında
   tutarlılığı, değişim noktası etiketlerinin gözlemlerle uyumu ve özellik dosyasına sızmaması, grup/çalıştırma bütünlüğü.
 
+Test sonucu analizi testleri (birim; ağ yok, sentetik fikstürler `tests/fixtures/junit/`):
+
+* `tests/test_sanitize.py`: HGS2 kişisel parametreleri ve varyasyonları, benzer ama hassas olmayan alanlar, URL/form/JSON
+  (iç içe, liste, bozuk), log, header ve stack trace satırları, bağlantı dizeleri, idempotentlik, desteklenmeyen türler.
+* `tests/test_records.py`: `TestRecord` doğrulaması, JSON gidiş-dönüşü, eksik/geçersiz alanlar, maskeleme sınırı,
+  kaynak sonucu ile analiz sonucunun ayrımı, `RawResult` dönüşümü.
+* `tests/test_junit_report.py`: PASS/FAIL/ERROR/SKIPPED, birden çok suite, boş suite, eksik isteğe bağlı alanlar,
+  çelişkili ve geçersiz değerler, okunmayan bölümler, boş/bozuk/bulunamayan dosya, XXE ve varlık genişletme, boyut
+  sınırı, kırpma, 5 000 testlik rapor, UTF-16 ve ad alanı.
+* `tests/test_classify.py`: her sınıf ve kural; beklenen ret ile beklenmeyen ret, bilinmeyen beklenti, gövdesiz
+  HTTP 200, 4xx/5xx, zaman aşımı, taşıma ve altyapı hataları, çelişkiler, kanıtta hassas değer olmaması, süreden
+  bağımsızlık.
+* `tests/test_junit_pipeline.py`: fikstürlerden uçtan uca belge ve `junit classify` komutu, determinizm, üzerine
+  yazmama, çıktıda hassas değer veya yerel yol olmaması, modüllerin ağ koduna ve F5'e bağımlı olmaması.
+* `tests/test_response_parser.py`: tanınan değerler, alt dize eşleşmemesi, JSON metni/alanı, iç içe ve eşanlamlı
+  alanların aranmaması, bozuk JSON, boş/yakalanmamış gövde, desteklenmeyen/eksik/geçersiz içerik türü, charset,
+  boyut sınırı (sınırda ve bir bayt fazla), geçersiz durum kodu, rastgele baytlar, özette gövde içeriği olmaması,
+  `from_dict` doğrulaması.
+* `tests/test_business_outcome.py`: gerçek `ScenarioRunner` + sahte taşıyıcı → TestRecord → N4; davranış tablosunun
+  tüm satırları, kaynak `FAIL`/`SKIPPED` sonucunun korunması, özet/sonuç tutarlılığı, `RawResult` şemasının
+  değişmemesi, gövdedeki kişisel değerlerin hiçbir çıktıya ulaşmaması.
+* `tests/test_result_analysis.py`: `execute_run` (sahte taşıyıcı) → sonuç dosyaları + `response_parsing` →
+  `results classify`; beklenti dosyası doğrulaması, beklenti kaynakları, ısınma atlama, eski/tutarsız/bozuk
+  metadata, veri türü çözümlemesi, determinizm, üzerine yazmama, girdilerin değişmemesi.
+* `tests/test_business_outcome_local.py` (entegrasyon): gerçek `RequestsTransport` ile yerel sunucudaki HGS2 benzeri
+  gövdeler → `run` → `results classify`; sentetik deneyin geçerliliğinin ve boş `business_outcome`'un korunması.
+* `tests/test_expectations.py`: beklenti modeli (zorunlu alanlar, enum, durum kodu, çelişki, bilinmeyen iş sonucu,
+  sürüm), doğrulama durumları ve kanıt yeterliliği (incelenmemiş, desteksiz alan, gerçek kapsamda kod
+  incelemesi/fikstür, çürüten kanıt), kanıt referansları (mutlak yol, maskeleme), registry (boş/bozuk/eksik dosya,
+  kısmi hata, yineleme, çelişki, determinizm, dosyanın değişmemesi), eşleştirme, CLI, değer sızdırmayan hata
+  mesajları, ağ kodundan bağımsızlık.
+* `tests/test_expectations_pipeline.py`: A–H senaryoları (doğrulanmış/taslak/incelenmiş/kaynaksız/çelişkili
+  beklenti, kaynak FAIL/SKIPPED, HTTP 200 + gövdesiz), taşıma ve kapsam kuralları; sentetik yanıt → ayrıştırıcı →
+  TestRecord → registry → N4 → JSON uçtan uca; geçersiz registry'nin reddi; sürüm 1 uyumu.
+* `tests/test_junit_analysis.py`: testcase özelliğinden senaryo kimliği (değer/metin, eksik, geçersiz, çelişkili,
+  tekrar, suite düzeyi ve test adının kullanılmaması), eşleştirme durumları ve kaydın korunması, A–J senaryoları
+  (PASS/FAIL + VERIFIED, kimliksiz kayıt, DRAFT, çelişkili beklenti, bozuk rapor, çoklu rapor sayaçları, hassas
+  veri, eski şema ve sürüm 1, geçersiz/eksik registry), sayaçların kayıtlarla tutarlılığı, tekrar eden rapor ve
+  test, kapsam uyarısı, gözlenemeyen beklenti alanları, determinizm, CLI ve üzerine yazmama.
+* `tests/test_readiness.py`: rapor envanteri (tüm durumlar, değer içermemesi), gerçek/sentetik kapsam beklenti
+  hazırlığı, READY / READY_WITH_WARNINGS / BLOCKED yolları, eksik/geçersiz/sürüm 1 registry, yetersiz meta veri,
+  okunamayan/boş rapor, güvenlik öz-testleri (maskeleme devre dışı bırakılınca yakalanması), hassas değer ve
+  kanarya sızmaması, isimden kimlik türetilmemesi, CLI çıkış kodları, ağ kodundan bağımsızlık.
+* `tests/test_ingestion.py`: alım paketinin kabul/ret/tekrar kuralları, incelenmiş ve incelenmemiş etiket,
+  gerçek/sentetik ayrımı, eksik isteğe bağlı alanlar, bilinmeyen sonuç, geçersiz girdi ve zarf, şema 1 kaydı,
+  maskeleme, mevcut hatta (registry → N4) aktarım, CLI.
+* `tests/test_scenario_mapping.py` (N10): eşleme dosyası (geçerli, boş, bozuk JSON, desteklenmeyen sürüm, şema
+  hataları, eksik tanımlayıcı, geçersiz senaryo kimliği, yinelenen kimlik/eşleme, DEPRECATED, çelişkili eşleme,
+  hassas tanımlayıcının değeri yazılmadan reddi, maskeleme), kararlı tanımlayıcı (sınıfsız/adsız/maskeli kayıt,
+  `#` içeren ad), metadata yolları (geçerli/eksik/geçersiz/çelişkili/tekrar), çakışma ve belirsizlik (aynı/farklı
+  kimlik, çoklu eşleme, bulunamama, suite veya test adından türetilmeme), kayıtlara uygulama, sıra bağımsızlığı.
+* `tests/test_scenario_mapping_pipeline.py` (N10): uçtan uca kabul (rapor → kayıt → çözümleme → registry → kapsam ve
+  doğrulama → N4 → JSON → readiness), çelişkili ve belirsiz eşlemelerin uçtan uca davranışı, beklenti entegrasyonu
+  (VERIFIED + PASS/FAIL, SKIPPED, DRAFT, REVIEWED, kapsam uyuşmazlığı, çoklu beklenti, gözlenemeyen alanlar,
+  registry'de olmayan senaryo), determinizm (tekrar, dosya ve eşleme sırası), readiness (READY/BLOCKED yolları,
+  çelişki ve belirsizlik uyarıları, geçersiz eşleme dosyası, yalnızca DRAFT/REVIEWED, öz-testin sessiz öncelik
+  kuralını yakalaması), CLI, hassas veri ve yerel yol sızıntısı, ağ kodundan bağımsızlık.
+
+N11 testleri (gerçek HGS2 ile canlı entegrasyon testi DEĞİLDİR; yanıt biçimleri HGS2 kaynak kodundan statik olarak
+çıkarılmış sentetik gövdelerdir):
+
+* `tests/test_hgs2_contract.py` (birim): sözleşmedeki her yanıt biçiminin ayrıştırılması (`NONE`, `SCAN_*`,
+  `{"status":"WAITING"}`, `{"status":"READY","value":…}`, `sessionId`, Spring biçimli hata), eksik/bilinmeyen/sayısal
+  `status`, bozuk JSON, boş/çözülemeyen/desteklenmeyen gövde; `ONAYLANDI`/`REDDEDILDI` ayrımı, `READY`/`WAITING`'in
+  onay sayılmaması, 2xx + bilinmeyen gövdenin PASS olmaması (`H-STATUS-OK-UNKNOWN-BODY`), beklenen 4xx'in durum
+  koduyla kararı, `READY` gövdesindeki değerin hiçbir çıktıya yazılmaması.
+* `tests/test_isolation_guard.py` (birim): süreç içi yalıtım kararı (loopback + bu süreçte bind edilmiş port),
+  korumanın gerçek `connect`'i çağırmadan reddetmesi ve oturum boyunca kurulu olması; ayrılmış portların (`8080`,
+  `5432`) taşıyıcıda, bağlantı katmanında ve `execute_run`'da bağlantı kurulmadan reddi.
+* `tests/test_hgs2_contract_local.py` (entegrasyon): yerel sunucudaki HGS2 biçimli uçlar → `run` → `results classify`
+  uçtan uca; yalnızca süreç içi sunucuya bağlanıldığı; kapalı sunucuda tek girişim, yeniden deneme ve başka hedef
+  olmaması; dış adrese yönlendirmenin izlenmemesi; oturum korumasının bu sürecin açmadığı porta bağlantıyı engellemesi.
+* `tests/test_sanitize.py` (ekler): `eskiNo`, `yeniNo`, `slot`, `fpSlot` maskelenir; `timeslot`, `slots` gibi benzer
+  adlar maskelenmez.
+
+N12 testleri (F-1 ve F-3; gerçek HGS2 ile canlı entegrasyon testi DEĞİLDİR):
+
+* `tests/test_classify.py`, `tests/test_hgs2_contract.py`, `tests/test_business_outcome.py`,
+  `tests/test_expectations_pipeline.py`, `tests/test_result_analysis.py` (ekler, `rules-v3`): 2xx + yalnızca durum kodu
+  beklentisinde boş, 4 KiB'tan büyük, yakalanmamış, tanınmayan, bozuk JSON gövde, eksik/boş/bozuk ayrıştırma özeti
+  (uçtan uca `records_from_run` ile) ve `WAITING`/`READY`/`NONE`/`SCAN_*` → `INCONCLUSIVE`; 204 + boş gövde, olumlu
+  iş sonucu, açık ara durum beklentisi, beklenen 3xx/4xx/5xx ve beklenmeyen 5xx kararlarının değişmemesi.
+* `tests/test_target_identity.py` (birim; sahte dinleyici okuyucusu): dinleyici politikası (süreç içi, bildirilmiş
+  dış süreç, bildirilmemiş, ad eşleşmezliği, okunamayan ad, JVM/PostgreSQL, karışık dinleyiciler), doğrulayıcının
+  önbelleği ve okuma hatası, `verify_target`, bağlantı katmanı, `execute_run`'ın istek ve dosya olmadan reddi, sahte
+  taşıyıcıların denetlenmemesi, `target_process` yapılandırması, oturum korumasının bırakılmış port kararı.
+* `tests/test_target_identity_local.py` (entegrasyon, yalnızca Windows): gerçek dinleyici tablosu; süreç içi
+  dinleyicinin PID'i, Python alt sürecinin dinleyicisinin bildirim gerektirmesi (alt sürece istek gönderilmez),
+  bildirilmemiş dış hedefe `run`'ın istek ve dosya olmadan reddi, bırakılmış portu başka bir süreç dinleyince oturum
+  korumasının engellemesi, dinleyicisiz bırakılmış porta izin, tamamlanan çalıştırmada
+  `execution.target_verification` kaydı.
+
 Ağ sınırları: test sunucusu (`tests/local_http_server.py`) yalnızca `127.0.0.1`'e ve geçici bir porta bind eder.
+`tests/conftest.py` tüm test oturumunda `isolation_guard`'ı kurar: hedef loopback IP'si değilse ya da port bu test
+sürecinde bind edilmemişse bağlantı kurulmadan engellenir ve test başarısız sayılır (gerçek HGS2 ayrı bir süreçtir).
 Her entegrasyon testinde `socket.socket.connect`/`connect_ex` sarılır; hedef `127.0.0.1` değilse bağlantı kurulmadan
 test hata verir. Testlerdeki dış adresler (`203.0.113.0/24`, `2001:db8::/32`) belge aralıklarıdır ve yalnızca
 reddedilmesi beklenen değerler olarak kullanılır. Zamanlama testleri yalnızca alt sınır doğrular.
 
+## N11 kapanış kaydı: güvenli entegrasyon hazırlığı (2026-10-29)
+
+**Kapsam:** yanıt ayrıştırıcısı (`response-parser-v2`), sınıflandırıcı (`rules-v2`), maskeleme (`eskiNo`, `yeniNo`,
+`slot`), ayrılmış portlar, test süreci yalıtımı, HGS2 biçimli sentetik testler ve bu belge. F1–F5 (sentetik sunucu,
+kampanya, veri seti, F4 telemetri, F5 Robust Z-score) değiştirilmedi. Gerçek HGS2'ye istek gönderilmedi, HGS2
+başlatılmadı ve testleri çalıştırılmadı, PostgreSQL'e bağlanılmadı, donanımla iletişim kurulmadı. `results/`
+dizinine yazılmadı.
+
+Çalıştırılan testler (Windows 11, Python 3.15.0, `.venv`, `-p no:cacheprovider -rfE --tb=long`):
+
+| Komut | Sonuç |
+|---|---|
+| `pytest` (birim; entegrasyon hariç) | 1444 passed, 97 deselected |
+| `pytest -m integration` (3 tam tur) | her turda 97 passed, 1444 deselected |
+| `pytest -m integration tests/test_synthetic_server.py::test_hold_fields_over_real_socket_and_client_time_includes_hold` (30 ayrı süreç) | 30/30 passed |
+
+* Kararsız test adayı: README'nin F3-E kaydına göre 2026-10-24'teki tek başarısız entegrasyon çalıştırmasının test adı
+  **kaydedilmemişti**; bu testin o test olduğu kanıtlanamaz. N11'de başarısızlık gözlenmedi; kök neden bilinmiyor ve
+  sorun çözülmüş sayılmaz.
+* Platform gözlemi (N11): Windows'ta kapalı bir loopback portuna bağlanma, işletim sisteminin bağlantı yeniden
+  denemeleri nedeniyle 1–2 sn'lik zaman aşımında `timeout` olarak sonuçlanabildi (beklenen `connection_error`
+  yerine). İlgili test hata türünü taşıma hatası olarak kabul eder; tek girişim ve aynı hedef koşulunu korur.
+* Bu testlerin hiçbiri gerçek HGS2 ile canlı entegrasyon testi değildir. Gerçek kapsamda `readiness` BLOCKED kalır.
+
+## N12 kapanış kaydı: F-1 / F-3 düzeltmeleri ve saklanmış test kanıtları (2026-10-29)
+
+**Kapsam:** N11 sonrası denetimin F-1 (yalnızca durum kodu beklentisiyle yanlış PASS), F-3 (gerçek HGS2'nin yalnızca
+port listesiyle ayrılması), F-10 (doğrulanabilir test çıktısı yok) ve F-11 (geri dönüş noktası yok) bulguları.
+Gerçek HGS2 dizinine dokunulmadı, HGS2 başlatılmadı, API'sine istek gönderilmedi; PostgreSQL'e bağlanılmadı (bu
+makinede `127.0.0.1:5432`'de bir PostgreSQL hizmeti ÇALIŞIYOR; yalnızca dinleyici tablosu okundu, bağlantı
+kurulmadı); donanımla iletişim yok. F1–F5'e özgü modüller ve testleri değiştirilmedi. Commit/push yapılmadı.
+
+**Yedek (F-11):** `C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\backups\backup-20261029T182428-pre-f1-f3\`
+— değişikliklerden ÖNCEKİ çalışma ağacı (HEAD `1fe78f4` + 14 değiştirilmiş + 62 izlenmeyen dosya, `.git` dahil;
+`.venv`/`__pycache__`/egg-info hariç; 337 dosya). `MANIFEST-source.sha256` (144 kaynak dosya) kopya üzerinde yeniden
+doğrulandı; `git-state/` altında durum, `diff --stat`, ikili yama ve dosya listeleri var. N11 raporunda bildirilen
+yedek yolu bulunamadı.
+
+**Değişiklikler:**
+
+* F-1: `classify.py` `rules-v3` (bkz. "Sınıflandırıcı").
+* F-3: `port_owner.py` (yeni; Windows dinleyici tablosu), `target_process.py` (yeni; ağ kodu içermez),
+  `target_guard.check_listener`, `http_transport` (`verify_target`, bağlantı katmanında denetim), `execution`
+  (ilk istekten önce doğrulama, `execution.target_verification`), `config` (`target_process`),
+  `configs/config.example.json` (`"target_process": "python.exe"`), `tests/isolation_guard.py` (bırakılmış port).
+* Bilinçli olarak değiştirilen eski test beklentileri (her biri yeni davranışı sınar): 2xx + boş gövde / ayrıştırma
+  özeti yok + yalnızca durum kodu → artık `INCONCLUSIVE` (`test_classify`, `test_hgs2_contract`,
+  `test_business_outcome`, `test_expectations_pipeline`, `test_result_analysis`); ayrılmış porta ve dinleyicisiz
+  porta `run` artık istek göndermeden `PreflightError` (`test_isolation_guard`, `test_hgs2_contract_local`).
+
+**Test kanıtları (F-10):** her çalıştırma ayrı bir dizinde; `command.txt`, `environment.json`, başlangıç/bitiş
+(`summary.json`), `git-head.txt`, `git-status-short.txt`, `git-diff-stat.txt`, test edilen ağacın SHA-256 manifesti
+(`tree-manifest.sha256`), `junit.xml`, tam konsol çıktısı (`console.txt`). Kök:
+`C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\test-evidence\`; çalıştırıcı:
+`hgs2-lab-artifacts\tools\run_pytest_evidence.py` (`.venv` Python 3.15.0, pytest 9.1.1, requests 2.34.2, urllib3
+2.8.0, Windows 11; `-p no:cacheprovider -rfEs --tb=long --junitxml=...`).
+
+| Dizin (`test-evidence\…`) | Kod sürümü | Komut özeti | Sonuç |
+|---|---|---|---|
+| `20261029T152546Z-baseline-pre-change-unit` | değişiklik ÖNCESİ (ağaç `67389db4…`, yedekle aynı) | `pytest` | 1444 passed |
+| `20261029T152651Z-baseline-pre-change-integration` | değişiklik ÖNCESİ | `pytest -m integration` | 97 passed |
+| `20261029T154402Z-step1-response-parser` | değişiklik SONRASI (ağaç `894c216f…`) | ayrıştırıcı + HGS2 sözleşmesi | 115 passed |
+| `20261029T154405Z-step2-classification` | SONRASI | sınıflandırma | 248 passed |
+| `20261029T154409Z-step3-target-security` | SONRASI | hedef güvenliği, maskeleme, yapılandırma | 364 passed |
+| `20261029T154423Z-step4-synthetic-http-integration` | SONRASI | `-m integration` yerel HTTP | 34 passed |
+| `20261029T154438Z-step5-f1-f5-regression` | SONRASI | F1–F5 ve ortak modüller (birim + entegrasyon) | 529 passed |
+| `20261029T154522Z-step6-full-unit` | SONRASI | `pytest` | 1519 passed, 103 deselected |
+| `20261029T154537Z…`, `…154620Z…`, `…154705Z-step6-full-integration-round1..3` | SONRASI | `pytest -m integration` (3 ayrı süreç) | her turda 103 passed |
+| `20261029T154043Z-flaky-candidate-normal` | ara ağaç (`12780c8b…`; kod aynı, belge ve örnek yapılandırma farklı) | kararsız test adayı | 1 passed |
+| `20261029T154053Z-flaky-candidate-race-repro` | ara ağaç + depo dışı gecikme eklentisi (`NOTE.txt`) | yarış yeniden üretimi | 1 failed (beklenen; `TypeError`) |
+
+Değişiklik sonrası çalıştırmaların hepsi aynı ağaçtadır (`tree-manifest.sha256` özeti `894c216f…`, 148 dosya). Bu
+kayıt (README.md) testlerden sonra yazıldı; test edilen ağaçla son ağaç arasındaki tek fark README.md'dir. Atlanan
+(skipped) test yok. Gerçek kapsamda `readiness` BLOCKED kalır; bu testlerin hiçbiri gerçek HGS2 ile canlı entegrasyon
+testi değildir.
+
 ## Henüz uygulanmamış özellikler ve bilinen sınırlamalar
 
+* **Yanıt gövdesi belleğe sınırsız okunur.** `RequestsTransport.send`, ölçüm için gövdenin tamamını
+  `response.content` ile belleğe alır; boyut sınırı yoktur (ayrıştırma 4 KiB ile sınırlıdır). Büyüyen HGS2 liste
+  uçları (`/api/logs`, `/api/users`) ölçülürse bellek ve süre etkilenir. N11'de değiştirilmedi (taşıma katmanı yeniden
+  yazımı kapsam dışı); bir üst sınır (ör. aşınca `transport_error`) ayrı bir tasarım kararıdır.
+* **Hedefin yalıtılmış olduğu kanıtlanamaz.** Ayrılmış portlar (`8080`, `5432`) yalnızca alt korumadır. N12 dinleyici
+  kimliği denetimi gerçek HGS2'yi (JVM) hangi portta çalışırsa çalışsın reddeder; ancak süreç adı bir kimlik kanıtı
+  değildir (bildirilen bir dış süreç gerçek sisteme iletebilir), denetim yalnızca Windows'ta ve okunduğu anda geçerlidir.
+  HGS2 tarafında test profili, ayrı test veritabanı ve doğrulanabilir kimlik işareti gerekir (bkz. "Gerçek HGS2 API
+  sözleşmesi"); bunlar olmadan gerçek HGS2 testleri engellidir.
+* **Kararsız test adayı (N12 statik analiz):** `synthetic_server._handle` yanıtı yazdıktan SONRA `completed_ns`'i
+  kaydeder; `test_hold_fields_over_real_socket_and_client_time_includes_hold` istemci yanıtı alır almaz `snapshot()`
+  okur ve `completed_ns` henüz `None` olabilir (`TypeError`). `_finish` yapay olarak geciktirildiğinde (depo dışı
+  eklenti) test belirleyici biçimde başarısız oldu. Bu, gerçek bir yarış durumudur; 2026-10-24'teki kaydedilmemiş
+  başarısızlığın bu olduğu kanıtlanmadı. F1 dosyaları değiştirilmedi; önerilen düzeltme testte olayın tamamlanmasını
+  (`completed_ns`) beklemektir.
+* **Donanım entegrasyonu doğrulanmadı.** ESP32/Arduino Mega ile hiçbir test yapılmadı; HGS2 deposundaki Mega
+  firmware dosyası tamamen yorum satırıdır.
+
+* **Senaryo eşleştirmesi (N10) yalnızca sentetik raporlarla doğrulandı.** Maven Surefire + JUnit 5'in testcase
+  düzeyinde `hgs2_lab.scenario_id` özelliği üretip üretmediği ve gerçek HGS2 raporlarındaki `name` özniteliğinin
+  biçimi (ör. parantezli/parametreli adlar) doğrulanmadı. Gerçek HGS2 için eşleme dosyası ve doğrulanmış beklenti
+  yoktur; gerçek kapsamda `readiness check` BLOCKED kalır.
 * **Gerçek HGS2'ye karşı hiç çalıştırılmadı.** Loopback dışı hedef (ör. ayrı bir test sunucusu) desteği bilinçli olarak
   yoktur; eklenmesi ayrı, açık bir tasarım kararı gerektirir.
 * **Gerçek HGS2 performans verisi yoktur; makine öğrenmesi modeli yoktur.** Tek dedektör sentetik veri üzerinde
-  değerlendirilen Robust Z-score'dur (bkz. F5). `analyze` yalnızca tek
+  değerlendirilen Robust Z-score'dur (bkz. F5). Test sonucu sınıflandırıcısı kural tabanlıdır ve gerçek HGS2 hata
+  örnekleriyle doğrulanmamıştır; JUnit dışında test raporu biçimi (Spring Boot log dosyası, JSONL) desteklenmez. `analyze` yalnızca tek
   bir çalıştırmanın betimleyici istatistiklerini üretir; çalıştırmalar arası karşılaştırma ve rapor üretimi yoktur.
   Sistem telemetrisi (F4) yalnızca toplanır; analiz edilmez ve sonuçlarla birleştirilmez.
 * Eşzamanlı istekler, yük profilleri (sabit hız, kademeli artış) ve süreye dayalı testler yok; istekler tek iş
@@ -1383,7 +2620,8 @@ reddedilmesi beklenen değerler olarak kullanılır. Zamanlama testleri yalnızc
 * Analiz modülleri yalnızca Python 3.15.0 (tüm testler) ve 3.13.16 (analiz duman testi, aynı çıktı özeti) ile
   çalıştırıldı; `pyproject.toml`'daki en düşük sürüm olan 3.10 ile sınanmadı.
 * Kimlik doğrulama (token alma/yenileme, ortam değişkeninden gizli değer) yok.
-* `business_outcome` doldurulmuyor; bağlantının yeniden kullanılıp kullanılmadığı kaydedilmiyor.
+* `business_outcome` yalnızca izin listesindeki düz metin/JSON değerleri için doldurulur (bkz. "Yanıt ayrıştırma ve iş
+  sonucu"); gerçek HGS2 uçlarına karşı doğrulanmadı. Bağlantının yeniden kullanılıp kullanılmadığı kaydedilmiyor.
 * Sonuçlar çalıştırma sonunda yazılır (istek bazında ara yazım yok); süreç zorla sonlandırılırsa (ör. görev
   yöneticisinden) sonuçlar kaybolur. Ctrl+C desteklenir.
 * requests `timeout` toplam süre sınırı değildir; tek bir istek `timeout_seconds`'tan uzun sürebilir.

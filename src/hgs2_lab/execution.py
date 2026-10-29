@@ -7,6 +7,10 @@ Akış:
    gecikmelerden gelen en kısa süre ve sonuç dosyası çakışması. Herhangi biri uymazsa
    `PreflightError` fırlatılır ve HİÇBİR HTTP isteği gönderilmez, taşıyıcı oluşturulmaz.
 2. İstekler başlamadan Git bilgisi ve girdi dosyası özetleri alınır.
+2b. Hedef doğrulaması (N12): taşıyıcı `verify_target` sunuyorsa (gerçek ağ taşıyıcısı) ilk istekten ÖNCE çağrılır:
+   ayrılmış port ve hedef portu dinleyen sürecin kimliği (bkz. target_guard.check_listener). Uymazsa taşıyıcı
+   kapatılır, `PreflightError` fırlatılır; hiçbir istek gönderilmez ve dosya yazılmaz. Sonuç metadata'da
+   `execution.target_verification` olarak kaydedilir. Sahte taşıyıcılar (testler) ağ kullanmadığı için denetlenmez.
 3. Runner, `SafetyGuard` ile çalışır: süre sınırı, art arda taşıma hatası ve hata oranı eşiği.
 4. Sonuç ne olursa olsun taşıyıcı kapatılır, tamamlanan kayıtlar metadata ile kaydedilir.
 5. İsteğe bağlı telemetri (`telemetry`): istekler boyunca örneklenir ve sonuçlardan SONRA ayrı dosyaya yazılır
@@ -48,7 +52,8 @@ from .runner import RunStopped, ScenarioRunner
 from .sanitize import sanitize_text
 from .scenarios import Scenario
 from .storage import ResultStore
-from .target_guard import Resolver, TargetNotAllowed, check_target, system_resolver
+from .port_owner import system_listener_lookup
+from .target_guard import ListenerLookup, Resolver, TargetNotAllowed, check_target, system_resolver
 from .telemetry import TelemetryRecorder
 from .telemetry import output_paths as telemetry_output_paths
 from .transport import Transport
@@ -191,6 +196,7 @@ def execute_run(
     dataset_kind: str = DATASET_MEASUREMENT,
     synthetic: dict[str, Any] | None = None,
     telemetry: TelemetryRecorder | None = None,
+    listener_lookup: ListenerLookup = system_listener_lookup,
 ) -> RunOutcome:
     """Bir çalıştırmayı uçtan uca yürütür ve sonuçları kaydeder.
 
@@ -221,8 +227,24 @@ def execute_run(
     inputs = input_hashes(config_path, config.scenarios_file)
     started_at = now()
 
-    factory = transport_factory or (lambda: RequestsTransport(resolver=resolver))
-    transport = factory()
+    def default_transport() -> RequestsTransport:
+        # Varsayılandan farklı olanlar verilir (taşıyıcıyı yalnızca `resolver` ile değiştiren mevcut çağıranlar için).
+        extra: dict[str, Any] = {}
+        if listener_lookup is not system_listener_lookup:
+            extra["listener_lookup"] = listener_lookup
+        if config.target_process is not None:
+            extra["target_process"] = config.target_process
+        return RequestsTransport(resolver=resolver, **extra)
+
+    transport = (transport_factory or default_transport)()
+    target_verification = None
+    verify = getattr(transport, "verify_target", None)
+    if verify is not None:
+        try:
+            target_verification = verify(config.base_url)
+        except TargetNotAllowed as exc:
+            transport.close()
+            raise PreflightError(f"Hedef reddedildi: {exc}") from exc
     runner = ScenarioRunner(
         transport, config.base_url, run_id, config.timeout_seconds,
         sleep=sleep, now=now, clock=clock, guard=SafetyGuard(config.limits, clock), wall_clock=wall_clock,
@@ -257,11 +279,13 @@ def execute_run(
         "completed_requests": len(results),
         "limits": config.limits.to_dict(),
     }
+    if target_verification is not None:
+        execution["target_verification"] = target_verification
     metadata = build_run_metadata(
         config, scenarios, started_at, now(),
         config_path=config_path, monotonic_duration_ms=runner.monotonic_duration_ms,
         target_label=target_label, code=code, inputs=inputs, execution=execution, clock=runner.clock_anchor,
-        dataset_kind=dataset_kind, synthetic=synthetic,
+        dataset_kind=dataset_kind, synthetic=synthetic, response_parsing=runner.response_parsing,
     )
     try:
         csv_path, json_path = store.save(run_id, results, metadata, partial=status != STATUS_COMPLETED)

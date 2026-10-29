@@ -9,24 +9,63 @@ Kontrol üç katmanda yapılır (bkz. README "Güvenlik sınırları"):
    adresin değişmesi (DNS rebinding) bağlantı kurulmadan yakalanır.
 
 Loopback dışı hedefe izin veren bir ayar veya otomatik geri dönüş yoktur.
+
+Ayrılmış portlar (`RESERVED_PORTS`): loopback denetimi, aynı makinede çalışan gerçek HGS2'yi yalıtılmış bir test
+sunucusundan AYIRAMAZ (ikisi de 127.0.0.1'dedir). Gerçek HGS2 yapılandırmasındaki portlara (HGS2
+`application.properties`: `server.port`, `spring.datasource.url`) gerçek ağ taşıyıcısı istek göndermez. Bu bir alt
+korumadır, yalıtım kanıtı değildir: gerçek HGS2 başka bir portta başlatılırsa tanınmaz. Ayrılmış portu açan bir
+ayar veya seçenek yoktur.
+
+Dinleyici kimliği (`check_listener`, N12): istek göndermeden önce hedef portu dinleyen süreç(ler) işletim sisteminden
+okunur (port_owner.py; ağ trafiği yok). İzin yalnızca şu durumlarda verilir:
+* dinleyicinin tamamı BU süreçtir (Lab'in kendi sentetik/test sunucusu); ya da
+* dinleyici başka bir süreçtir, adı yapılandırmada `target_process` ile AÇIKÇA bildirilmiştir ve ad eşleşir.
+JVM ve PostgreSQL süreçleri (`REFUSED_PROCESS_NAMES`) her koşulda reddedilir: gerçek HGS2 (Spring Boot) bir JVM'de
+çalışır; HGS2 test profili ve kimlik işareti doğrulanana kadar hiçbir HGS2 örneği hedef olamaz. Süreç adı okunamazsa,
+dinleyici yoksa ya da tablo okunamazsa hedef doğrulanmamış sayılır.
+Sınırlar: süreç adı kimlik kanıtı değildir (JVM olmayan bir vekil süreç gerçek sisteme iletebilir); denetim okunduğu
+ana aittir (dinleyici sonradan değişebilir); yalnızca Windows'ta uygulanır.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
+from types import MappingProxyType
 from urllib.parse import urlsplit
+
+from .target_process import REFUSED_PROCESS_NAMES, is_refused_process, validate_target_process  # noqa: F401
 
 ALLOWED_SCHEMES = frozenset({"http", "https"})
 ALLOWED_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _DEFAULT_PORTS = {"http": 80, "https": 443}
+RESERVED_PORTS = MappingProxyType({
+    8080: "gerçek HGS2'nin server.port değeri",
+    5432: "gerçek HGS2'nin PostgreSQL bağlantı portu",
+})
+
+LISTENER_IN_PROCESS = "in_process"
+LISTENER_DECLARED_EXTERNAL = "declared_external"
 
 Resolver = Callable[[str, int], Iterable[str]]
 
 
 class TargetNotAllowed(ValueError):
     """Hedef loopback değil, şeması desteklenmiyor ya da güvenle çözümlenemedi."""
+
+
+@dataclass(frozen=True)
+class ListenerOwner:
+    """Bir portta dinleyen soket: sahibi süreç ve yerel adresi (port_owner.py doldurur)."""
+
+    pid: int
+    process_name: str | None  # çalıştırılabilir dosyanın adı (yol yok); okunamadıysa None
+    address: str
+
+
+ListenerLookup = Callable[[int], Sequence[ListenerOwner]]
 
 
 def system_resolver(host: str, port: int) -> list[str]:
@@ -74,6 +113,47 @@ def resolve_loopback(host: str, port: int, resolver: Resolver = system_resolver)
     if outside:
         raise TargetNotAllowed(f"{host!r} loopback dışı adrese çözümlendi: {', '.join(outside)}")
     return addresses
+
+
+def check_not_reserved_port(port: int) -> None:
+    """Port gerçek HGS2 ortamına ayrılmışsa reddeder (bkz. modül açıklaması)."""
+    reason = RESERVED_PORTS.get(port)
+    if reason is not None:
+        raise TargetNotAllowed(f"Port {port} ayrılmış ({reason}); gerçek sisteme ulaşmamak için test hedefi olamaz")
+
+
+def check_listener(
+    port: int,
+    owners: Sequence[ListenerOwner],
+    *,
+    own_pid: int,
+    target_process: str | None = None,
+) -> str:
+    """Portu dinleyen süreçlerin hedef olabileceğini denetler (bkz. modül açıklaması).
+
+    Döner: `LISTENER_IN_PROCESS` ya da `LISTENER_DECLARED_EXTERNAL`. Uymazsa `TargetNotAllowed`.
+    """
+    if not owners:
+        raise TargetNotAllowed(f"Port {port}'ta dinleyen süreç bulunamadı; hedefin kimliği doğrulanamadı")
+    external = False
+    for owner in owners:
+        if owner.pid == own_pid:
+            continue
+        name = owner.process_name
+        if name is None:
+            raise TargetNotAllowed(f"Port {port}'u dinleyen sürecin (PID {owner.pid}) adı okunamadı; hedef "
+                                   "doğrulanamadı")
+        if is_refused_process(name):
+            raise TargetNotAllowed(f"Port {port}'u bir JVM/PostgreSQL süreci dinliyor ({name}, PID {owner.pid}); "
+                                   "gerçek HGS2 veya veritabanı olabilir, hedef olamaz")
+        if target_process is None:
+            raise TargetNotAllowed(f"Port {port}'u bu Lab süreci değil başka bir süreç dinliyor ({name}, PID "
+                                   f"{owner.pid}); dış hedef yapılandırmada `target_process` ile açıkça bildirilmeli")
+        if name.lower() != target_process.lower():
+            raise TargetNotAllowed(f"Port {port}'u dinleyen süreç ({name}, PID {owner.pid}) bildirilen "
+                                   f"target_process ({target_process}) ile eşleşmiyor")
+        external = True
+    return LISTENER_DECLARED_EXTERNAL if external else LISTENER_IN_PROCESS
 
 
 def check_target(url: str, resolver: Resolver = system_resolver) -> list[str]:

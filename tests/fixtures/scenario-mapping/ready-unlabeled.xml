@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.HazirTests" time="0.2" tests="2" failures="0" errors="0" skipped="0">
+  <testcase name="kartPasifCihaz" classname="com.example.lab.HazirTests" time="0.010"/>
+  <testcase name="numaraGecerli" classname="com.example.lab.HazirTests" time="0.011"/>
+</testsuite>

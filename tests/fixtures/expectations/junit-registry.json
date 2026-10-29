@@ -1,0 +1,49 @@
+{
+  "expectations_version": 2,
+  "registry_id": "lab-junit-n8",
+  "evidence": [
+    {
+      "evidence_id": "ev-junit-fixture",
+      "source_type": "synthetic_fixture",
+      "source_ref": "tests/fixtures/junit-n8/batch-a.xml",
+      "location": "com.example.lab.KartTests",
+      "supports": ["test_outcome"],
+      "review_status": "REVIEWED",
+      "description": "Sentetik fikstürün tasarımı: hangi testin hangi sonucu vermesi beklendiği"
+    },
+    {
+      "evidence_id": "ev-junit-http",
+      "source_type": "synthetic_fixture",
+      "source_ref": "tests/fixtures/junit-n8/batch-a.xml",
+      "location": "httpBeklentisi",
+      "supports": ["http_status", "business_outcome", "test_outcome"],
+      "review_status": "REVIEWED"
+    },
+    {
+      "evidence_id": "ev-junit-taslak",
+      "source_type": "manual_review",
+      "source_ref": "N8-INCELEME-01",
+      "supports": ["test_outcome"],
+      "review_status": "UNREVIEWED"
+    }
+  ],
+  "expectations": [
+    {"expectation_id": "exp-j-kart-pasif", "version": 1, "scenario_id": "kart-pasif-cihaz", "status": "VERIFIED",
+     "scope": "synthetic", "expected_test_outcome": "PASS", "evidence_ids": ["ev-junit-fixture"]},
+    {"expectation_id": "exp-j-kart-gecerli", "version": 1, "scenario_id": "kart-gecerli", "status": "VERIFIED",
+     "scope": "synthetic", "expected_test_outcome": "PASS", "evidence_ids": ["ev-junit-fixture"]},
+    {"expectation_id": "exp-j-zaman-asimi", "version": 1, "scenario_id": "kart-zaman-asimi", "status": "DRAFT",
+     "scope": "synthetic", "expected_test_outcome": "ERROR", "evidence_ids": ["ev-junit-taslak"]},
+    {"expectation_id": "exp-j-numara-taslak", "version": 1, "scenario_id": "numara-taslak", "status": "DRAFT",
+     "scope": "synthetic", "expected_test_outcome": "PASS"},
+    {"expectation_id": "exp-j-sadece-eski", "version": 1, "scenario_id": "sadece-eski", "status": "DEPRECATED",
+     "scope": "synthetic", "expected_test_outcome": "PASS"},
+    {"expectation_id": "exp-j-cakisan-a", "version": 1, "scenario_id": "cakisan", "status": "VERIFIED",
+     "scope": "synthetic", "expected_test_outcome": "PASS", "evidence_ids": ["ev-junit-fixture"]},
+    {"expectation_id": "exp-j-cakisan-b", "version": 1, "scenario_id": "cakisan", "status": "DRAFT",
+     "scope": "synthetic", "expected_test_outcome": "FAIL"},
+    {"expectation_id": "exp-j-kart-http", "version": 1, "scenario_id": "kart-http", "status": "VERIFIED",
+     "scope": "synthetic", "expected_http_status": [200], "expected_business_outcome": ["REDDEDILDI"],
+     "expected_test_outcome": "PASS", "evidence_ids": ["ev-junit-http"]}
+  ]
+}

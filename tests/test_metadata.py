@@ -19,6 +19,7 @@ from hgs2_lab.metadata import (
     file_sha256,
     input_hashes,
     redact,
+    response_parsing_section,
     scenario_snapshot,
 )
 from hgs2_lab.scenarios import Scenario
@@ -80,7 +81,7 @@ def test_run_metadata_contents_and_no_secrets(tmp_path):
     meta = build(tmp_path, target_label="yerel-test")
     assert set(meta) == {
         "tool_version", "dataset_kind", "target_label", "started_at", "finished_at", "monotonic_duration_ms", "clock",
-        "execution", "code", "dependencies", "environment", "inputs", "config", "scenarios",
+        "execution", "code", "dependencies", "environment", "inputs", "config", "scenarios", "response_parsing",
     }
     assert meta["dataset_kind"] == "measurement"  # varsayılan; sentetik deney açıkça işaretlenir
     assert meta["execution"] is None  # doğrudan çağrıda durum verilmedi; çalıştırma akışı doldurur
@@ -254,3 +255,17 @@ def test_environment_info_keys():
     info = environment_info()
     assert {"python_version", "python_implementation", "platform", "machine", "cpu_count"} <= set(info)
     json.dumps(info)
+
+
+def test_response_parsing_section_defaults_and_counts(tmp_path):
+    empty = build(tmp_path)["response_parsing"]
+    assert empty == {"parser_version": "response-parser-v2", "max_parse_bytes": 4096,
+                     "recognized_business_outcomes": ["HATA", "KAYDEDILDI", "NONE", "OK", "ONAYLANDI", "READY",
+                                                      "REDDEDILDI", "SCAN_CARD", "SCAN_FP", "SCAN_SCHOOL_NO",
+                                                      "WAITING"],
+                     "rules": {}, "requests": []}
+    entries = [{"seq": 1, "rule_id": "R-TEXT-TOKEN"}, {"seq": 2, "rule_id": "R-EMPTY-BODY"},
+               {"seq": 3, "rule_id": "R-TEXT-TOKEN"}]
+    section = response_parsing_section(entries)
+    assert section["rules"] == {"R-EMPTY-BODY": 1, "R-TEXT-TOKEN": 2} and section["requests"] == entries
+    assert section["requests"][0] is not entries[0]  # kopya

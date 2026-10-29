@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE testsuite [
+  <!ENTITY xxe SYSTEM "file:///c:/windows/win.ini">
+]>
+<testsuite name="xxe" tests="1">
+  <testcase name="&xxe;" classname="X" time="0.1"/>
+</testsuite>

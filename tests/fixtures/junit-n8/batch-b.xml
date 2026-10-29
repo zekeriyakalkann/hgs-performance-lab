@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.KartTests" time="0.5" tests="2" failures="0" errors="0" skipped="0">
+  <testcase name="kartPasifCihaz" classname="com.example.lab.KartTests" time="0.020">
+    <properties>
+      <property name="hgs2_lab.scenario_id" value="kart-pasif-cihaz"/>
+    </properties>
+  </testcase>
+  <testcase name="logYaz" classname="com.example.lab.LogTests" time="0.021"/>
+</testsuite>

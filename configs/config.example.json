@@ -1,5 +1,6 @@
 {
-  "base_url": "http://127.0.0.1:8080",
+  "base_url": "http://127.0.0.1:18080",
+  "target_process": "python.exe",
   "timeout_seconds": 10,
   "output_dir": "../results",
   "scenarios_file": "scenarios.example.json",

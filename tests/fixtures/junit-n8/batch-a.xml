@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="lab-n8">
+  <testsuite name="com.example.lab.KartTests" time="1.0" tests="12" failures="2" errors="1" skipped="1">
+    <properties>
+      <property name="spring.datasource.password" value="FAKE-SUITE-PASS-901"/>
+    </properties>
+    <testcase name="kartPasifCihaz" classname="com.example.lab.KartTests" time="0.010">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="kart-pasif-cihaz"/>
+      </properties>
+    </testcase>
+    <testcase name="kartGecerli" classname="com.example.lab.KartTests" time="0.011">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="kart-gecerli"/>
+      </properties>
+      <failure message="expected: &lt;ONAYLANDI&gt; but was: &lt;REDDEDILDI&gt;" type="org.opentest4j.AssertionFailedError">org.opentest4j.AssertionFailedError: expected: &lt;ONAYLANDI&gt; but was: &lt;REDDEDILDI&gt;
+	at com.example.lab.KartTests.kartGecerli(KartTests.java:40)
+</failure>
+    </testcase>
+    <testcase name="kartZamanAsimi" classname="com.example.lab.KartTests" time="5.000">
+      <properties>
+        <property name="hgs2_lab.scenario_id">kart-zaman-asimi</property>
+      </properties>
+      <error message="Read timed out" type="java.net.SocketTimeoutException">java.net.SocketTimeoutException: Read timed out
+	at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:288)
+</error>
+    </testcase>
+    <testcase name="kartAtlandi" classname="com.example.lab.KartTests" time="0">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="kart-atlandi"/>
+      </properties>
+      <skipped message="Donanım gerektirir"/>
+    </testcase>
+    <testcase name="numaraOkut" classname="com.example.lab.KartTests" time="0.012"/>
+    <testcase name="numaraTaslak" classname="com.example.lab.KartTests" time="0.013">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="numara-taslak"/>
+      </properties>
+    </testcase>
+    <testcase name="eskiSurum" classname="com.example.lab.KartTests" time="0.014">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="sadece-eski"/>
+      </properties>
+    </testcase>
+    <testcase name="cakisanBeklenti" classname="com.example.lab.KartTests" time="0.015">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="cakisan"/>
+      </properties>
+    </testcase>
+    <testcase name="hassasMesaj" classname="com.example.lab.KartTests" time="0.016">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="hassas-mesaj"/>
+        <property name="spring.datasource.password" value="FAKE-CASE-PASS-902"/>
+      </properties>
+      <failure message="POST /api/auth/kart-okut?kartNo=KART-SENTETIK-111 dondu: REDDEDILDI" type="java.lang.AssertionError">java.lang.AssertionError: istek basarisiz
+	Authorization: Bearer FAKE-TOKEN-903
+	at com.example.lab.KartTests.hassasMesaj(KartTests.java:90)
+</failure>
+    </testcase>
+    <testcase name="gecersizKimlik" classname="com.example.lab.KartTests" time="0.017">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="../kotu kimlik"/>
+      </properties>
+    </testcase>
+    <testcase name="celisenKimlik" classname="com.example.lab.KartTests" time="0.018">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="kart-pasif-cihaz"/>
+        <property name="hgs2_lab.scenario_id" value="kart-gecerli"/>
+      </properties>
+    </testcase>
+    <testcase name="httpBeklentisi" classname="com.example.lab.KartTests" time="0.019">
+      <properties>
+        <property name="hgs2_lab.scenario_id" value="kart-http"/>
+      </properties>
+    </testcase>
+  </testsuite>
+  <testsuite name="com.example.lab.BosTests" tests="0" failures="0" errors="0" skipped="0"/>
+</testsuites>

@@ -1,0 +1,29 @@
+{
+  "expectations_version": 2,
+  "registry_id": "hgs2-taslak-ornek",
+  "evidence": [
+    {
+      "evidence_id": "ev-hgs2-authcontroller",
+      "source_type": "source_code_review",
+      "source_ref": "HGS:src/main/java/com/HibritGirisSistemi/HGS/Controller/AuthController.java",
+      "location": "islemYap: cihaz bulunamadı veya pasif dalı",
+      "supports": ["http_status", "business_outcome"],
+      "review_status": "UNREVIEWED",
+      "description": "Kodda bu dalda ResponseEntity.ok(\"REDDEDILDI\") görüldü. Kaynak koddan çıkarılan bir gözlemdir; onaylanmış iş kuralı değildir ve gerçek sistemde doğrulanmadı."
+    }
+  ],
+  "expectations": [
+    {
+      "expectation_id": "hgs2-kart-pasif-cihaz",
+      "version": 1,
+      "scenario_id": "kart-pasif-cihaz",
+      "endpoint_id": "POST /api/auth/kart-okut",
+      "status": "DRAFT",
+      "scope": "real",
+      "expected_http_status": [200],
+      "expected_business_outcome": ["REDDEDILDI"],
+      "evidence_ids": ["ev-hgs2-authcontroller"],
+      "description": "TASLAK: pasif veya kayıtsız cihazdan gelen kart okutması reddedilir. Doğrulanmadı."
+    }
+  ]
+}

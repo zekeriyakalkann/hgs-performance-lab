@@ -1,0 +1,20 @@
+{
+  "expectations_version": 2,
+  "registry_id": "lab-hazirlik-n9",
+  "evidence": [
+    {
+      "evidence_id": "ev-hazir-fikstur",
+      "source_type": "synthetic_fixture",
+      "source_ref": "tests/fixtures/readiness/ready.xml",
+      "location": "com.example.lab.HazirTests",
+      "supports": ["test_outcome"],
+      "review_status": "REVIEWED"
+    }
+  ],
+  "expectations": [
+    {"expectation_id": "exp-hazir-kart", "version": 1, "scenario_id": "hazir-kart-pasif", "status": "VERIFIED",
+     "scope": "synthetic", "expected_test_outcome": "PASS", "evidence_ids": ["ev-hazir-fikstur"]},
+    {"expectation_id": "exp-hazir-numara", "version": 1, "scenario_id": "hazir-numara-gecerli", "status": "VERIFIED",
+     "scope": "synthetic", "expected_test_outcome": "PASS", "evidence_ids": ["ev-hazir-fikstur"]}
+  ]
+}

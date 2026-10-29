@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.ApplicationTests" time="3.0" tests="1" errors="1" skipped="0" failures="0">
+  <testcase name="contextLoads" classname="com.example.lab.ApplicationTests" time="2.900">
+    <error message="Failed to load ApplicationContext for [WebMergedContextConfiguration@1a2b testClass = com.example.lab.ApplicationTests]" type="java.lang.IllegalStateException">java.lang.IllegalStateException: Failed to load ApplicationContext
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:180)
+Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'entityManagerFactory'
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1786)
+Caused by: java.net.ConnectException: Connection refused for jdbc:postgresql://db.example.invalid:5432/lab?user=fake&amp;password=FAKE-DB-PASS-777
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+</error>
+  </testcase>
+</testsuite>

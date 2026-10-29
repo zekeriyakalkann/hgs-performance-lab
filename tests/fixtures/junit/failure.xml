@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.AuthFlowTests" time="0.5" tests="1" errors="0" skipped="0" failures="1">
+  <testcase name="kartOkutGecerliKart" classname="com.example.lab.AuthFlowTests" time="0.120">
+    <failure message="expected: &lt;ONAYLANDI&gt; but was: &lt;REDDEDILDI&gt;" type="org.opentest4j.AssertionFailedError">org.opentest4j.AssertionFailedError: expected: &lt;ONAYLANDI&gt; but was: &lt;REDDEDILDI&gt;
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at com.example.lab.AuthFlowTests.kartOkutGecerliKart(AuthFlowTests.java:42)
+</failure>
+  </testcase>
+</testsuite>

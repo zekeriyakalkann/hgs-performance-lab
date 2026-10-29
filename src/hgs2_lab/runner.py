@@ -15,6 +15,10 @@ istisnalar (programlama hataları dahil) olduğu gibi yayılır.
 
 Kayda yazılan URL ve hata mesajındaki hassas değerler maskelenir (bkz. sanitize.py).
 
+HTTP yanıtı alınan her istekte gövde `response_parser.parse_response` ile ayrıştırılır (süre ölçümünden sonra; ölçüme
+dahil değildir): tanınan bir iş sonucu varsa `business_outcome` alanına yazılır, gövdenin kendisi yazılmaz. Her
+yanıtın ayrıştırma özeti (`response_parsing`) metadata için tutulur.
+
 İsteğe bağlı `guard`: her istekten önce `before_request()`, her kayıttan sonra
 `after_result(result)` çağrılır; `RunStopped` fırlatarak çalıştırmayı kontrollü
 durdurabilir. Tamamlanan kayıtlar `results` ile her zaman (kesinti sonrasında da)
@@ -31,6 +35,7 @@ from typing import Protocol
 from ._validate import require_number
 from .clock import ClockAnchor
 from .models import RawResult, validate_run_id
+from .response_parser import parse_response
 from .sanitize import sanitize_text, sanitize_url, sensitive_values
 from .scenarios import Scenario
 from .transport import Transport, TransportError, TransportResponse
@@ -89,11 +94,17 @@ class ScenarioRunner:
         self._seq = 0
         self._guard = guard
         self._results: list[RawResult] = []
+        self._parsing: list[dict] = []
 
     @property
     def results(self) -> list[RawResult]:
         """Bu çalıştırmada şimdiye kadar tamamlanan tüm kayıtlar (kopya)."""
         return list(self._results)
+
+    @property
+    def response_parsing(self) -> list[dict]:
+        """HTTP yanıtı alınan her isteğin ayrıştırma özeti (`seq` + ParsedResponse.to_dict()); gövde içermez."""
+        return [dict(entry) for entry in self._parsing]
 
     @property
     def monotonic_duration_ms(self) -> float | None:
@@ -177,10 +188,14 @@ class ScenarioRunner:
                 error=sanitize_text(_describe(failure), secrets),
             )
         assert response is not None
-        return RawResult(
+        parsed = parse_response(response.status_code, response.content_type, response.body)
+        result = RawResult(
             **common,
             duration_ms=response.duration_ms if response.duration_ms is not None else elapsed_ms,
             status_code=response.status_code,
             http_ok=scenario.is_expected_status(response.status_code),
+            business_outcome=parsed.business_outcome,
             response_bytes=response.size_bytes,
         )
+        self._parsing.append({"seq": self._seq, **parsed.to_dict()})
+        return result

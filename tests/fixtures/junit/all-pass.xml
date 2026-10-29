@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.lab.AuthFlowTests" time="1.250" tests="2" errors="0" skipped="0" failures="0" timestamp="2026-10-26T10:00:00">
+  <properties>
+    <property name="spring.datasource.password" value="FAKE-PROP-PASS-999"/>
+    <property name="user.home" value="C:\Users\FakeUser"/>
+  </properties>
+  <testcase name="kartOkutOnaylanir" classname="com.example.lab.AuthFlowTests" time="0.437">
+    <system-out><![CDATA[2026-10-26T10:00:00.000+03:00  INFO 1 --- [lab] [main] c.e.l.AuthFlowTests : FAKE-SYSOUT-LINE]]></system-out>
+  </testcase>
+  <testcase name="numaraOkutOnaylanir" classname="com.example.lab.AuthFlowTests" time="0.013"/>
+  <system-err><![CDATA[WARNING: FAKE-SYSERR-LINE]]></system-err>
+</testsuite>

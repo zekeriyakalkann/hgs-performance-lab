@@ -3,6 +3,15 @@
 Kimlik bilgisi içermez; base_url içinde kullanıcı adı/parola da reddedilir.
 Göreli yollar (output_dir, scenarios_file) yapılandırma dosyasının bulunduğu
 dizine göre çözülür, çalışma dizinine göre değil.
+
+`target_process` (isteğe bağlı, N12): hedef portu bu Lab süreci dışındaki bir süreç dinliyorsa o sürecin dosya adı
+(ör. `python.exe`). Yükleme sırasında biçimi ve JVM/PostgreSQL adı olmadığı denetlenir; dinleyicinin gerçekten bu
+süreç olduğu çalıştırmada, ilk istekten önce denetlenir (bkz. target_guard.check_listener). Verilmezse yalnızca Lab'in
+kendi süreç içi sunucularına gidilebilir.
+
+Yükleme sırasında ayrılmış port ve dinleyici denetimi YAPILMAZ: LabConfig sahte taşıyıcılı testlerde de kullanılır ve
+dinleyici ancak çalıştırma anında okunabilir. Bu denetimler gerçek ağ taşıyıcısıyla çalıştırmada, ilk istekten önce
+uygulanır (execution.execute_run).
 """
 
 from __future__ import annotations
@@ -12,8 +21,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from ._validate import read_json_file, reject_unknown_keys, require_int, require_number, require_str
+from .target_process import validate_target_process
 
-ALLOWED_KEYS = frozenset({"base_url", "timeout_seconds", "output_dir", "scenarios_file", "limits"})
+ALLOWED_KEYS = frozenset({"base_url", "timeout_seconds", "output_dir", "scenarios_file", "limits", "target_process"})
 
 # Yapılandırmayla aşılamayan sabit tavanlar (bkz. README "İstek bütçesi ve durdurma").
 HARD_MAX_REQUESTS = 10_000
@@ -88,9 +98,15 @@ class LabConfig:
     output_dir: Path = Path("results")
     scenarios_file: Path = Path("scenarios.json")
     limits: RunLimits = field(default_factory=RunLimits)
+    target_process: str | None = None
 
     def __post_init__(self) -> None:
         _validate_base_url(self.base_url)
+        if self.target_process is not None:
+            try:
+                validate_target_process(self.target_process)
+            except ValueError as exc:
+                raise ConfigError(str(exc)) from exc
         require_number(self.timeout_seconds, "timeout_seconds", ConfigError, positive=True)
         for name in ("output_dir", "scenarios_file"):
             if not isinstance(getattr(self, name), Path):
@@ -99,12 +115,15 @@ class LabConfig:
             raise ConfigError("limits bir RunLimits olmalı")
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "base_url": self.base_url,
             "timeout_seconds": self.timeout_seconds,
             "output_dir": str(self.output_dir),
             "scenarios_file": str(self.scenarios_file),
         }
+        if self.target_process is not None:  # yalnızca verildiğinde: önceki metadata çıktıları değişmez
+            data["target_process"] = self.target_process
+        return data
 
 
 def load_config(path: str | Path) -> LabConfig:
@@ -122,6 +141,8 @@ def load_config(path: str | Path) -> LabConfig:
         kwargs["timeout_seconds"] = raw["timeout_seconds"]
     if "limits" in raw:
         kwargs["limits"] = _parse_limits(raw["limits"])
+    if "target_process" in raw:
+        kwargs["target_process"] = raw["target_process"]
     for key, default in (("output_dir", "results"), ("scenarios_file", "scenarios.json")):
         value = require_str(raw.get(key, default), key, ConfigError)
         kwargs[key] = (base_dir / value).resolve()  # mutlak yol verilirse olduğu gibi kalır

@@ -14,6 +14,26 @@ Komutlar:
   (bkz. features.py). 0 = yazıldı, 1 = doğrulama hatası, 5 = çıktı dizini boş değil / yazılamadı.
 * detect robust-z: özellik tablosundan Robust Z-score gecikme dedektörü; train normal satırlarıyla kalibrasyon,
   bölüm bazında değerlendirme (bkz. detection.py). 0 = yazıldı, 1 = doğrulama/kalibrasyon hatası, 5 = çıktı var.
+* junit classify: JUnit/Surefire XML raporlarını çevrimdışı ve toplu olarak ayrıştırır (junit_report.py), isteğe
+  bağlı beklenti dosyasıyla açık senaryo kimliği üzerinden eşleştirir, her testi kanıta dayalı kurallarla
+  sınıflandırır (classify.py, junit_analysis.py) ve tek JSON belgesi yazar. 0 = yazıldı, 1 = yazıldı ama en az bir
+  rapor dosyası reddedildi (belgede `file_errors`) ya da beklenti dosyası geçersiz (hiçbir şey yazılmaz),
+  5 = çıktı dosyası var / yazılamadı. Hedef sisteme erişmez.
+* results classify: kaydedilmiş bir çalıştırmanın ölçüm isteklerini (iş sonucu dahil) TestRecord'a dönüştürür ve aynı
+  kurallarla sınıflandırır (result_analysis.py). 0 = yazıldı, 1 = sonuç/beklenti dosyası okunamadı, 5 = çıktı var.
+* readiness check: gerçek entegrasyon önkoşullarını çevrimdışı denetler (readiness.py): rapor alan envanteri, senaryo
+  kimliği, beklenti sözleşmesi, güvenlik öz-testleri, analiz hattı. 0 = READY / READY_WITH_WARNINGS, 1 = BLOCKED,
+  5 = çıktı var. Hedef sisteme, veritabanına veya ağa erişmez; READY hedef sistemin doğru çalıştığını göstermez.
+* ingest analyze: veri alım paketini (ingestion.py) doğrular, kabul edilen kayıtları beklentiyle eşleştirip
+  sınıflandırır ve JSON yazar. 0 = yazıldı, 1 = yazıldı ama girdi reddedildi ya da paket/beklenti dosyası geçersiz
+  (hiçbir şey yazılmaz), 5 = çıktı var.
+* expectations validate|show: beklenti sözleşmesini (expectations_version 2; expectations.py) doğrular / listeler.
+  Dosyayı yalnızca okur. validate: 0 = geçerli (çelişkiler UYARI olarak), 1 = geçersiz (tüm bulgular listelenir).
+* scenario-map validate: senaryo eşleme dosyasını (scenario_mapping_version 1; scenario_mapping.py) doğrular. Dosyayı
+  yalnızca okur. 0 = geçerli (çelişkili eşlemeler UYARI olarak), 1 = geçersiz (tüm bulgular listelenir).
+  `junit classify` ve `readiness check` için `--scenario-map`: kimlikler testcase özelliği ve eşleme dosyasından
+  çözümlenir; çelişki/belirsizlikte kimlik seçilmez. Geçersiz eşleme dosyası `junit classify`'ı 1 ile durdurur
+  (hiçbir şey yazılmaz); `readiness check`'te A6 engelleyicidir.
 
 campaign run: 0 = tüm deneyler geçerli, 6 = en az bir deney geçersiz/başarısız (katalogda nedenleriyle),
 3 = çıktı dizini boş değil (hiç deney çalışmadı), 130 = Ctrl+C. campaign verify: 0 = sorun yok, 1 = sorun var.
@@ -35,6 +55,8 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
+import json
 import sys
 from collections import Counter
 from collections.abc import Sequence
@@ -63,8 +85,16 @@ from .execution import (
     execute_run,
     summarize,
 )
+from .junit_analysis import build_junit_analysis_document, parse_reports
 from .models import InvalidRunId
 from .reader import load_run
+from .records import CLASSES, DATASET_KINDS, DATASET_UNKNOWN, EXPECTATION_SCOPES, SCOPE_REAL
+from .expectations import load_registry
+from .ingestion import IngestionError, build_ingestion_document, parse_ingestion
+from .scenario_mapping import MappingError, load_mapping
+from .readiness import BLOCKED as READINESS_BLOCKED
+from .readiness import run_readiness
+from .result_analysis import ExpectationsError, build_run_document, load_expectations, resolve_dataset_kind
 from .robust_z import BASELINE_DEGENERATE, CalibrationError
 from .scenarios import Scenario, ScenarioError, load_scenarios
 from .storage import StorageError
@@ -197,6 +227,60 @@ def build_parser() -> argparse.ArgumentParser:
                                                 "z > 3.5, bölüm bazında değerlendirme")
     q.add_argument("--features-dir", required=True, help="`dataset features` çıktı dizini (salt okunur)")
     q.add_argument("--output", required=True, help="Değerlendirme JSON dosyası (üzerine yazılmaz)")
+
+    p = sub.add_parser("junit", help="JUnit/Surefire XML test raporları (çevrimdışı; hedef sisteme erişmez)")
+    junit_sub = p.add_subparsers(dest="junit_command", required=True)
+    q = junit_sub.add_parser("classify", help="Raporları TestRecord'a dönüştür ve kanıta dayalı kurallarla sınıflandır")
+    q.add_argument("--report", required=True, action="append", help="Rapor dosyası (birden çok kez verilebilir)")
+    q.add_argument("--output", required=True, help="Sınıflandırma JSON dosyası (üzerine yazılmaz)")
+    q.add_argument("--dataset-kind", choices=sorted(DATASET_KINDS), default=DATASET_UNKNOWN,
+                   help="Kayıtların türü: real (gerçek sistem çıktısı), synthetic, fixture, unknown (varsayılan)")
+    q.add_argument("--expectations", help="Beklenti dosyası (sürüm 2 registry veya sürüm 1); kayıtlar testcase "
+                                          "özelliği hgs2_lab.scenario_id ile birebir eşleştirilir")
+    q.add_argument("--scenario-map", help="Senaryo eşleme dosyası (scenario_mapping_version 1): <classname>#<name> → "
+                                          "senaryo kimliği; metadata ile çelişirse kimlik seçilmez")
+
+    p = sub.add_parser("readiness", help="Gerçek entegrasyon önkoşul denetimi (çevrimdışı)")
+    readiness_sub = p.add_subparsers(dest="readiness_command", required=True)
+    q = readiness_sub.add_parser("check", help="Rapor envanteri, senaryo kimliği, beklenti, güvenlik ve hat denetimi")
+    q.add_argument("--report", required=True, action="append", help="JUnit/Surefire rapor dosyası (birden çok)")
+    q.add_argument("--expectations", help="Beklenti sözleşmesi (sürüm 2)")
+    q.add_argument("--scope", choices=sorted(EXPECTATION_SCOPES), default=SCOPE_REAL,
+                   help="Denetlenen beklenti kapsamı (varsayılan: %(default)s)")
+    q.add_argument("--scenario-map", help="Senaryo eşleme dosyası (scenario_mapping_version 1)")
+    q.add_argument("--output", help="Hazırlık raporu JSON dosyası (üzerine yazılmaz)")
+
+    p = sub.add_parser("ingest", help="Test sonucu örnekleri için veri alım sözleşmesi (çevrimdışı)")
+    ingest_sub = p.add_subparsers(dest="ingest_command", required=True)
+    q = ingest_sub.add_parser("analyze", help="Alım paketini doğrula, beklentiyle eşleştir ve sınıflandır")
+    q.add_argument("--file", required=True, help="Alım paketi (JSON, ingestion_version 1)")
+    q.add_argument("--expectations", help="Beklenti dosyası (sürüm 2 registry veya sürüm 1)")
+    q.add_argument("--output", required=True, help="Sınıflandırma JSON dosyası (üzerine yazılmaz)")
+
+    p = sub.add_parser("expectations", help="Beklenti sözleşmesi (expectations_version 2): doğrula / listele")
+    expectations_sub = p.add_subparsers(dest="expectations_command", required=True)
+    q = expectations_sub.add_parser("validate", help="Şema, kimlik, kanıt ve doğrulama durumu denetimi (salt okunur)")
+    q.add_argument("--file", required=True, help="Beklenti dosyası (JSON)")
+    q = expectations_sub.add_parser("show", help="Beklentileri, durumlarını ve kanıt referanslarını listele")
+    q.add_argument("--file", required=True, help="Beklenti dosyası (JSON)")
+    q.add_argument("--scenario", help="Yalnızca bu senaryo kimliği")
+
+    p = sub.add_parser("scenario-map", help="Senaryo eşleme sözleşmesi (scenario_mapping_version 1): doğrula")
+    mapping_sub = p.add_subparsers(dest="scenario_map_command", required=True)
+    q = mapping_sub.add_parser("validate", help="Şema, kimlik, yineleme ve çelişki denetimi (salt okunur)")
+    q.add_argument("--file", required=True, help="Eşleme dosyası (JSON)")
+
+    p = sub.add_parser("results", help="Kaydedilmiş çalıştırma sonuçlarının test sonucu analizi (çevrimdışı)")
+    results_sub = p.add_subparsers(dest="results_command", required=True)
+    q = results_sub.add_parser("classify", help="Ölçüm isteklerini TestRecord'a dönüştür ve kanıta dayalı kurallarla "
+                                                "sınıflandır (istek göndermez)")
+    q.add_argument("--run-id", required=True, help="Sınıflandırılacak çalıştırma")
+    q.add_argument("--results-dir", required=True, help="Sonuç dosyalarının dizini (salt okunur)")
+    q.add_argument("--output", required=True, help="Sınıflandırma JSON dosyası (üzerine yazılmaz)")
+    q.add_argument("--expectations", help="Senaryo başına beklenen sonuç dosyası (yoksa yalnızca senaryonun açık "
+                                          "expected_status listesi kullanılır)")
+    q.add_argument("--dataset-kind", choices=sorted(DATASET_KINDS),
+                   help="Ölçüm çalıştırmasının türü (varsayılan: metadata synthetic ise synthetic, değilse unknown)")
     return parser
 
 
@@ -517,6 +601,233 @@ def _detect(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _junit(args: argparse.Namespace) -> int:
+    if Path(args.output).exists():
+        print(f"Sınıflandırma dosyası zaten var, üzerine yazılmaz: {args.output}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    expectations, source = None, None
+    if args.expectations:  # geçersiz beklenti dosyası sessizce yok sayılmaz: hiçbir şey yazılmaz
+        try:
+            expectations, source = load_expectations(args.expectations)
+        except ExpectationsError as exc:
+            print(f"Beklenti dosyası kullanılamadı: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+    mapping = None
+    if args.scenario_map:  # geçersiz eşleme dosyası sessizce yok sayılmaz ve kısmen kullanılmaz: hiçbir şey yazılmaz
+        try:
+            mapping = load_mapping(args.scenario_map)
+        except MappingError as exc:
+            print(f"Eşleme dosyası kullanılamadı: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+    reports, errors, duplicates, given = parse_reports(args.report, dataset_kind=args.dataset_kind)
+    document = build_junit_analysis_document(reports, errors, duplicates=duplicates, files_given=given,
+                                             expectations=expectations, expectations_source=source,
+                                             scenario_mapping=mapping)
+    try:
+        write_document(document, args.output)
+    except AnalysisOutputError as exc:
+        print(f"Sınıflandırma kaydedilemedi: {exc}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    summary = document["classification"]["summary"]
+    print(f"JUnit sınıflandırma ({document['classification']['classifier_version']}): {summary['files_parsed']} rapor, "
+          f"{summary['records']} test, dataset_kind={args.dataset_kind}  content_sha256={document['content_sha256']}")
+    print("  kaynak sonuç: " + (", ".join(f"{k}={v}" for k, v in summary["by_test_outcome"].items()) or "yok"))
+    print("  sınıflar:     " + (", ".join(f"{c}={summary['by_classification'][c]}" for c in CLASSES
+                                         if summary["by_classification"][c]) or "yok"))
+    print(f"  inceleme gerektiren: {summary['requires_review']}")
+    matching = summary["expectation_matching"]
+    print(f"  senaryo kimliği: {matching['records_with_scenario_id']} kayıtta var, "
+          f"{matching['records_without_scenario_id']} kayıtta yok"
+          + ("; eşleşme: " + (", ".join(f"{k}={v}" for k, v in matching["by_match_status"].items()) or "yok")
+             if matching["requested"] else "; beklenti dosyası verilmedi (beklentisiz analiz)"))
+    resolution = summary["scenario_resolution"]
+    if mapping is not None:
+        print("  senaryo çözümlemesi: " + ", ".join(f"{k}={v}" for k, v in resolution["by_status"].items() if v)
+              + f"; inceleme gerektiren {resolution['requires_review']}")
+        print("  beklenti uygunluğu: " + ", ".join(f"{k}={v}" for k, v in resolution["by_decision_basis"].items())
+              + "; değerlendirme: " + ", ".join(f"{k}={v}" for k, v in resolution["by_expectation_assessment"].items()))
+        if mapping.conflicts:
+            print(f"UYARI: farklı senaryolara eşlenmiş testler (seçilmedi): {len(mapping.conflicts)}", file=sys.stderr)
+    for error in errors:
+        print(f"Reddedilen rapor: {error.source_file}: {error.code}: {error.message}", file=sys.stderr)
+    for dup in duplicates:
+        print(f"UYARI: {dup['source_file']} içeriği {dup['duplicate_of']} ile aynı; yeniden işlenmedi.", file=sys.stderr)
+    if summary["possible_duplicate_tests"]:
+        print(f"UYARI: birden fazla kayıtta görülen test: {len(summary['possible_duplicate_tests'])} "
+              "(birleştirilmedi; belgede possible_duplicate_tests)", file=sys.stderr)
+    if source is not None and source.get("registry", {}).get("conflicts"):
+        print(f"UYARI: birden fazla etkin beklentisi olan senaryolar (eşleştirilmedi): "
+              f"{', '.join(sorted(source['registry']['conflicts']))}", file=sys.stderr)
+    print(f"  çıktı: {args.output}")
+    return EXIT_ERROR if errors else EXIT_OK
+
+
+def _readiness(args: argparse.Namespace) -> int:
+    if args.output and Path(args.output).exists():
+        print(f"Hazırlık raporu zaten var, üzerine yazılmaz: {args.output}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    document = run_readiness(args.report, expectations_path=args.expectations, scope=args.scope,
+                             mapping_path=args.scenario_map)
+    if args.output:
+        try:
+            write_document(document, args.output)
+        except AnalysisOutputError as exc:
+            print(f"Hazırlık raporu kaydedilemedi: {exc}", file=sys.stderr)
+            return EXIT_STORAGE_ERROR
+    print(f"Hazırlık ({document['scope']} kapsamı): {document['status']}")
+    for check in document["checks"]:
+        print(f"  [{check['status']:4}] {check['id']}: {check['message']}")
+    print(f"  not: {document['statement']}")
+    if args.output:
+        print(f"  çıktı: {args.output}")
+    return EXIT_ERROR if document["status"] == READINESS_BLOCKED else EXIT_OK
+
+
+def _ingest(args: argparse.Namespace) -> int:
+    if Path(args.output).exists():
+        print(f"Sınıflandırma dosyası zaten var, üzerine yazılmaz: {args.output}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    path = Path(args.file)
+    try:
+        raw = path.read_bytes()
+        result = parse_ingestion(json.loads(raw.decode("utf-8")))
+        expectations, source = load_expectations(args.expectations) if args.expectations else (None, None)
+    except FileNotFoundError:
+        print(f"Alım dosyası bulunamadı: {path.name}", file=sys.stderr)
+        return EXIT_ERROR
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        print(f"Alım dosyası okunamadı veya geçerli UTF-8 JSON değil: {path.name}", file=sys.stderr)
+        return EXIT_ERROR
+    except (IngestionError, ExpectationsError) as exc:
+        print(f"Alım yapılamadı: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    document = build_ingestion_document(result, expectations=expectations, expectations_source=source,
+                                        source={"file": path.name, "sha256": hashlib.sha256(raw).hexdigest()})
+    try:
+        write_document(document, args.output)
+    except AnalysisOutputError as exc:
+        print(f"Sınıflandırma kaydedilemedi: {exc}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    summary = document["classification"]["summary"]
+    ingestion = summary["ingestion"]
+    print(f"Alım ({ingestion['batch_id']}, {ingestion['dataset_kind']}): kabul {ingestion['accepted']}, ret "
+          f"{ingestion['rejected']}, tekrar {ingestion['duplicates']}; incelenmemiş etiket "
+          f"{ingestion['labels_withheld_unreviewed']}  content_sha256={document['content_sha256']}")
+    print("  sınıflar: " + (", ".join(f"{c}={summary['by_classification'][c]}" for c in CLASSES
+                                      if summary["by_classification"][c]) or "yok"))
+    for item in result.rejected:
+        print(f"Reddedilen girdi #{item['index']}: {item['reason']}", file=sys.stderr)
+    print(f"  çıktı: {args.output}")
+    return EXIT_ERROR if result.rejected else EXIT_OK
+
+
+def _expectations(args: argparse.Namespace) -> int:
+    try:
+        registry = load_registry(args.file)
+    except ExpectationsError as exc:
+        print(f"Beklenti dosyası geçersiz: {Path(args.file).name}", file=sys.stderr)
+        for issue in exc.issues:
+            print(f"  - {issue}", file=sys.stderr)
+        return EXIT_ERROR
+    summary = registry.summary()
+    if args.expectations_command == "validate":
+        print(f"Geçerli: {summary['source']['file']}  registry_id={summary['registry_id'] or '-'}  "
+              f"content_sha256={summary['content_sha256']}")
+        print(f"  beklenti {summary['expectations']} (senaryo {summary['scenarios']}), kanıt {summary['evidence']}; "
+              "durum: " + ", ".join(f"{k}={v}" for k, v in summary["by_status"].items()))
+        for scenario, ids in summary["conflicts"].items():
+            print(f"UYARI: '{scenario}' için birden fazla etkin beklenti: {', '.join(ids)} (eşleştirilmez)",
+                  file=sys.stderr)
+        if summary["unused_evidence"]:
+            print(f"UYARI: kullanılmayan kanıt: {', '.join(summary['unused_evidence'])}", file=sys.stderr)
+        return EXIT_OK
+    shown = [e for e in registry.expectations if args.scenario in (None, e.scenario_id)]
+    if not shown:
+        print(f"Bu senaryo için beklenti yok: {args.scenario}", file=sys.stderr)
+        return EXIT_ERROR
+    for exp in shown:
+        e = exp.expected
+        issues = registry.assessments.get(exp.expectation_id, ())
+        print(f"{exp.scenario_id}\t{exp.expectation_id} v{exp.version}\t{exp.status}\tkapsam={exp.scope}\t"
+              f"http={list(e.status_codes) or '?'} iş={list(e.business_outcomes) or '?'} "
+              f"taşıma={e.expected_transport or '?'} kaynak_sonuç={e.expected_test_outcome or '?'}")
+        for eid in exp.evidence_ids:
+            ref = registry.evidence[eid]
+            print(f"    kanıt {eid}: {ref.source_type} {ref.source_ref}" + (f" [{ref.location}]" if ref.location else "")
+                  + f" {ref.review_status} {ref.relation} {','.join(ref.supports)}")
+        if not exp.evidence_ids:
+            print("    kanıt: yok")
+        if issues:
+            print(f"    kanıt yeterliliği: {', '.join(issues)}")
+    return EXIT_OK
+
+
+def _scenario_map(args: argparse.Namespace) -> int:
+    try:
+        mapping = load_mapping(args.file)
+    except MappingError as exc:
+        print(f"Eşleme dosyası geçersiz: {Path(args.file).name}", file=sys.stderr)
+        for issue in exc.issues:
+            print(f"  - {issue}", file=sys.stderr)
+        return EXIT_ERROR
+    summary = mapping.summary()
+    print(f"Geçerli: {summary['source']['file']}  mapping_set_id={summary['mapping_set_id'] or '-'}  "
+          f"content_sha256={summary['content_sha256']}")
+    print(f"  eşleme {summary['mappings']} (test {summary['tests']}, etkin senaryo {summary['scenarios']}); durum: "
+          + ", ".join(f"{k}={v}" for k, v in summary["by_status"].items()))
+    for key, ids in summary["conflicts"].items():
+        print(f"UYARI: '{key}' farklı senaryolara eşlenmiş: {', '.join(ids)} (seçilmez)", file=sys.stderr)
+    return EXIT_OK
+
+
+def _results(args: argparse.Namespace) -> int:
+    if Path(args.output).exists():
+        print(f"Sınıflandırma dosyası zaten var, üzerine yazılmaz: {args.output}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    try:
+        run = load_run(args.results_dir, args.run_id)
+        expectations, source = load_expectations(args.expectations) if args.expectations else (None, None)
+        dataset_kind = resolve_dataset_kind(run, args.dataset_kind)
+    except (StorageError, InvalidRunId, ExpectationsError, ValueError) as exc:
+        print(f"Sınıflandırılamadı: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    document = build_run_document(run, dataset_kind=dataset_kind, expectations=expectations,
+                                  expectations_source=source)
+    try:
+        write_document(document, args.output)
+    except AnalysisOutputError as exc:
+        print(f"Sınıflandırma kaydedilemedi: {exc}", file=sys.stderr)
+        return EXIT_STORAGE_ERROR
+    content = document["classification"]
+    summary, info = content["summary"], content["sources"][0]
+    print(f"Sonuç sınıflandırma ({content['classifier_version']}): çalıştırma {run.run_id}"
+          f"{' (kısmi)' if run.partial else ''}, {summary['records']} ölçüm isteği (ısınma "
+          f"{info['warmup_requests_skipped']} atlandı), dataset_kind={dataset_kind}  "
+          f"content_sha256={document['content_sha256']}")
+    print("  sınıflar: " + (", ".join(f"{c}={summary['by_classification'][c]}" for c in CLASSES
+                                      if summary["by_classification"][c]) or "yok"))
+    print(f"  inceleme gerektiren: {summary['requires_review']}  beklenti kaynağı: "
+          + ", ".join(f"{k}={v}" for k, v in info["expected_result_sources"].items()))
+    if "expectation_matches" in info:
+        registry = source["registry"]
+        print(f"  beklenti sözleşmesi: {registry['registry_id'] or '(kimliksiz)'} content_sha256="
+              f"{registry['content_sha256']}  eşleşme: "
+              + ", ".join(f"{k}={v}" for k, v in info["expectation_matches"].items()))
+        if registry["conflicts"]:
+            print(f"UYARI: birden fazla etkin beklentisi olan senaryolar (eşleştirilmedi): "
+                  f"{', '.join(sorted(registry['conflicts']))}", file=sys.stderr)
+    elif args.expectations:
+        print("UYARI: beklenti dosyası eski biçimde (sürüm 1); doğrulama durumu ve kanıt referansı yok.",
+              file=sys.stderr)
+    if not info["response_parsing_available"]:
+        print("UYARI: metadata'da yanıt ayrıştırma özeti yok (eski dosya); iş sonucu bilgisi yok.", file=sys.stderr)
+    if info["unused_expectations"]:
+        print(f"UYARI: çalıştırmada bulunmayan senaryo beklentileri: {', '.join(info['unused_expectations'])}",
+              file=sys.stderr)
+    print(f"  çıktı: {args.output}")
+    return EXIT_OK
+
+
 def _dataset(args: argparse.Namespace) -> int:
     if args.dataset_command == "features":
         return _dataset_features(args)
@@ -561,6 +872,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _dataset(args)
     if args.command == "detect":
         return _detect(args)
+    if args.command == "junit":
+        return _junit(args)
+    if args.command == "results":
+        return _results(args)
+    if args.command == "expectations":
+        return _expectations(args)
+    if args.command == "readiness":
+        return _readiness(args)
+    if args.command == "ingest":
+        return _ingest(args)
+    if args.command == "scenario-map":
+        return _scenario_map(args)
 
     try:
         config, scenarios = _load(args)

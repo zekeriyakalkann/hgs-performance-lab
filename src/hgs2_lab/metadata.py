@@ -27,6 +27,7 @@ from . import __version__
 from .clock import ClockAnchor
 from .config import LabConfig
 from .models import DATASET_KINDS, DATASET_MEASUREMENT, DATASET_SYNTHETIC
+from .response_parser import MAX_PARSE_BYTES, PARSER_VERSION, RECOGNIZED_BUSINESS_OUTCOMES
 from .sanitize import REDACTED, SENSITIVE_KEY_RE, sanitize_url
 from .scenarios import Scenario
 
@@ -40,6 +41,7 @@ __all__ = [
     "file_sha256",
     "input_hashes",
     "redact",
+    "response_parsing_section",
     "scenario_snapshot",
     "validate_dataset_kind",
     "validate_target_label",
@@ -61,6 +63,20 @@ def redact(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [redact(item) for item in value]
     return value
+
+
+def response_parsing_section(entries: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Metadata'nın `response_parsing` bölümü: ayrıştırıcı sürümü, sınırı, tanınan değerler, kural sayıları, istekler."""
+    rules: dict[str, int] = {}
+    for entry in entries:
+        rules[entry["rule_id"]] = rules.get(entry["rule_id"], 0) + 1
+    return {
+        "parser_version": PARSER_VERSION,
+        "max_parse_bytes": MAX_PARSE_BYTES,
+        "recognized_business_outcomes": sorted(RECOGNIZED_BUSINESS_OUTCOMES),
+        "rules": dict(sorted(rules.items())),
+        "requests": [dict(entry) for entry in entries],
+    }
 
 
 def scenario_snapshot(scenario: Scenario) -> dict[str, Any]:
@@ -196,6 +212,7 @@ def build_run_metadata(
     clock: ClockAnchor | None = None,
     dataset_kind: str = DATASET_MEASUREMENT,
     synthetic: dict[str, Any] | None = None,
+    response_parsing: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Bir çalıştırmanın metadata'sı.
 
@@ -204,6 +221,7 @@ def build_run_metadata(
     `clock`, runner'ın saat çapasıdır (bkz. clock.py); hiç istek başlamadıysa None yazılır.
     `dataset_kind` ölçüm ile sentetik deneyi ayırır; `synthetic` yalnızca sentetik deneyde dolu olur ve
     planlanan hataları DEĞİL, yalnızca deneyin kimliğini ve özetlerini taşır (bkz. synthetic.py).
+    `response_parsing`, runner'ın istek başına yanıt ayrıştırma özetleridir (gövde içermez; bkz. response_parser.py).
     """
     if clock is not None and not isinstance(clock, ClockAnchor):
         raise ValueError(f"clock bir ClockAnchor olmalı (alınan: {type(clock).__name__})")
@@ -232,6 +250,7 @@ def build_run_metadata(
         "inputs": inputs if inputs is not None else input_hashes(config_path, config.scenarios_file),
         "config": config_snapshot(config),
         "scenarios": [scenario_snapshot(s) for s in scenarios],
+        "response_parsing": response_parsing_section(response_parsing or ()),
     }
     if synthetic is not None:
         document["synthetic"] = synthetic

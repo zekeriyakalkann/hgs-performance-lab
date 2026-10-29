@@ -40,9 +40,11 @@ class TransportResponse:
     # Taşıyıcının kendi ölçtüğü HTTP süresi (ör. requests'in response.elapsed).
     # Verilmezse runner, ölçtüğü elapsed_ms değerini kullanır.
     duration_ms: float | None = None
-    # Ham yanıt gövdesi (çözülmüş, bkz. README). Runner kullanmaz; ileride
-    # business_outcome ayrıştırması için taşınır.
+    # Ham yanıt gövdesi (çözülmüş, bkz. README). Runner yalnızca iş sonucunu ayrıştırmak için okur
+    # (response_parser.py); gövdenin kendisi hiçbir kayda yazılmaz.
     body: bytes | None = field(default=None, repr=False)
+    # Yanıtın Content-Type başlığı (yoksa None); yalnızca gövde ayrıştırmada kullanılır.
+    content_type: str | None = None
 
 
 class Transport(Protocol):
