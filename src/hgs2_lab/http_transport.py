@@ -24,7 +24,8 @@ Kurallara uymayan hedef `TargetNotAllowed` ile, bağlantı kurulmadan reddedilir
 Dinleyici kimliği (N12): `verify_target` hedef portu dinleyen süreci işletim sisteminden okur ve
 `target_guard.check_listener` ile denetler (istek göndermeden; çalıştırma akışı ilk istekten önce çağırır). Bağlantı
 katmanı da her yeni bağlantıda aynı denetimi yapar; doğrulanmış port, taşıyıcının ömrü boyunca önbellekte tutulur
-(ölçüme ek süre girmesin diye). Bağlantı katmanında portu dinleyen süreç yoksa bağlantı denenir (işletim sistemi
+(ölçüme ek süre girmesin diye). Başlatılmış hedefte (`launched`, `hgs2 run`) her yeni bağlantıda ayrıca sürecin hâlâ
+çalıştığı denetlenir. Bağlantı katmanında portu dinleyen süreç yoksa bağlantı denenir (işletim sistemi
 reddeder) ama port doğrulanmış sayılmaz; dinleyici belirince ilk bağlantıdan önce denetlenir.
 """
 
@@ -48,6 +49,7 @@ from .port_owner import system_listener_lookup
 from .sanitize import sanitize_text, sensitive_values
 from .scenarios import ALLOWED_METHODS, Scenario
 from .target_guard import (
+    LaunchedTarget,
     ListenerLookup,
     Resolver,
     TargetNotAllowed,
@@ -93,17 +95,26 @@ def _translate(exc: requests.exceptions.RequestException, secrets: list[str]) ->
 
 
 class _ListenerVerifier:
-    """Port başına dinleyici kimliği denetimi (bkz. target_guard.check_listener); doğrulanan port önbelleğe alınır."""
+    """Port başına dinleyici kimliği denetimi (bkz. target_guard.check_listener); doğrulanan port önbelleğe alınır.
 
-    def __init__(self, lookup: ListenerLookup, target_process: str | None) -> None:
+    Başlatılmış hedefte (`launched`) önbellekteki port için de sürecin hâlâ çalıştığı her çağrıda denetlenir (tek bir
+    tutamak sorgusu; tablo yeniden okunmaz): süreç ölürse portu başka bir süreç alabilir.
+    """
+
+    def __init__(self, lookup: ListenerLookup, target_process: str | None,
+                 launched: LaunchedTarget | None = None) -> None:
         self._lookup = lookup
         self._target_process = target_process
+        self._launched = launched
         self._verified: dict[int, str] = {}
         self._lock = threading.Lock()
 
     def verify(self, port: int, *, require_listener: bool) -> str | None:
-        """Denetim sonucu (in_process / declared_external); dinleyici yok ve zorunlu değilse None."""
+        """Denetim sonucu (in_process / declared_external / launched); dinleyici yok ve zorunlu değilse None."""
         with self._lock:
+            if self._launched is not None and not self._launched.is_alive():
+                raise TargetNotAllowed(f"Lab'in başlattığı süreç (PID {self._launched.pid}) artık çalışmıyor; "
+                                       "hedef doğrulanamadı")
             if port in self._verified:
                 return self._verified[port]
             try:
@@ -113,7 +124,8 @@ class _ListenerVerifier:
                                        "hedef doğrulanamadı") from exc
             if not owners and not require_listener:
                 return None
-            mode = check_listener(port, owners, own_pid=os.getpid(), target_process=self._target_process)
+            mode = check_listener(port, owners, own_pid=os.getpid(), target_process=self._target_process,
+                                  launched=self._launched)
             self._verified[port] = mode
             return mode
 
@@ -205,6 +217,7 @@ class RequestsTransport:
 
     `listener_lookup` / `target_process`: dinleyici kimliği denetimi (bkz. `verify_target`). Varsayılan, işletim
     sistemi tablosudur (port_owner.py); `target_process` verilmezse yalnızca bu sürecin dinlediği portlara gidilir.
+    `launched`: Lab'in başlatıp doğruladığı süreç (yalnızca `hgs2 run`; bkz. target_guard.LaunchedTarget).
     """
 
     def __init__(
@@ -214,8 +227,10 @@ class RequestsTransport:
         resolver: Resolver = system_resolver,
         listener_lookup: ListenerLookup = system_listener_lookup,
         target_process: str | None = None,
+        launched: LaunchedTarget | None = None,
     ) -> None:
-        self._verifier = _ListenerVerifier(listener_lookup, target_process)
+        self._verifier = _ListenerVerifier(listener_lookup, target_process, launched)
+        self._launched = launched
         self._owns_session = session is None
         if session is None:
             session = requests.Session()
@@ -249,6 +264,8 @@ class RequestsTransport:
         resolve_loopback(host, port, self._resolver)
         check_not_reserved_port(port)
         mode = self._verifier.verify(port, require_listener=True)
+        if self._launched is not None:
+            return {"port": port, "listener": mode, "pid": self._launched.pid}
         return {"port": port, "listener": mode}
 
     def send(self, scenario: Scenario, url: str, timeout_seconds: float) -> TransportResponse:

@@ -25,6 +25,13 @@ JVM ve PostgreSQL süreçleri (`REFUSED_PROCESS_NAMES`) her koşulda reddedilir:
 dinleyici yoksa ya da tablo okunamazsa hedef doğrulanmamış sayılır.
 Sınırlar: süreç adı kimlik kanıtı değildir (JVM olmayan bir vekil süreç gerçek sisteme iletebilir); denetim okunduğu
 ana aittir (dinleyici sonradan değişebilir); yalnızca Windows'ta uygulanır.
+
+Başlatılmış hedef (`LaunchedTarget`, `hgs2 run`): JVM kuralının TEK istisnası. hgs2_launch.py HGS2'yi perftest
+profiliyle kendisi başlatır ve başlangıcı doğrular (güvenlik koruması günlüğü, PID'in dinlediği adres/port kümesi tam
+olarak {127.0.0.1:18080}); yalnızca bundan sonra bir `LaunchedTarget` üretir. `launched` verildiğinde portu dinleyen
+süreçlerin TAMAMI o PID olmalı ve süreç hâlâ çalışıyor olmalıdır; adı ne olursa olsun başka her dinleyici reddedilir
+(`target_process` ile birlikte kullanılamaz). `launched` verilmeden JVM/PostgreSQL kuralı aynen geçerlidir. Bu istisnayı
+açan bir yapılandırma anahtarı yoktur.
 """
 
 from __future__ import annotations
@@ -32,7 +39,7 @@ from __future__ import annotations
 import ipaddress
 import socket
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from urllib.parse import urlsplit
 
@@ -48,6 +55,7 @@ RESERVED_PORTS = MappingProxyType({
 
 LISTENER_IN_PROCESS = "in_process"
 LISTENER_DECLARED_EXTERNAL = "declared_external"
+LISTENER_LAUNCHED = "launched"
 
 Resolver = Callable[[str, int], Iterable[str]]
 
@@ -66,6 +74,18 @@ class ListenerOwner:
 
 
 ListenerLookup = Callable[[int], Sequence[ListenerOwner]]
+
+
+@dataclass(frozen=True)
+class LaunchedTarget:
+    """Lab'in kendi başlattığı ve başlangıcını doğruladığı süreç (yalnızca hgs2_launch.Hgs2Process.target() üretir).
+
+    `is_alive` sürecin Lab'in elindeki tutamağıyla hâlâ çalıştığını söyler (PID yeniden kullanılmaz: tutamak açıkken
+    işletim sistemi PID'i başka sürece vermez).
+    """
+
+    pid: int
+    is_alive: Callable[[], bool] = field(compare=False, repr=False)
 
 
 def system_resolver(host: str, port: int) -> list[str]:
@@ -128,13 +148,17 @@ def check_listener(
     *,
     own_pid: int,
     target_process: str | None = None,
+    launched: LaunchedTarget | None = None,
 ) -> str:
     """Portu dinleyen süreçlerin hedef olabileceğini denetler (bkz. modül açıklaması).
 
-    Döner: `LISTENER_IN_PROCESS` ya da `LISTENER_DECLARED_EXTERNAL`. Uymazsa `TargetNotAllowed`.
+    Döner: `LISTENER_IN_PROCESS`, `LISTENER_DECLARED_EXTERNAL` ya da (`launched` ile) `LISTENER_LAUNCHED`.
+    Uymazsa `TargetNotAllowed`.
     """
     if not owners:
         raise TargetNotAllowed(f"Port {port}'ta dinleyen süreç bulunamadı; hedefin kimliği doğrulanamadı")
+    if launched is not None:
+        return _check_launched(port, owners, launched, target_process)
     external = False
     for owner in owners:
         if owner.pid == own_pid:
@@ -154,6 +178,20 @@ def check_listener(
                                    f"target_process ({target_process}) ile eşleşmiyor")
         external = True
     return LISTENER_DECLARED_EXTERNAL if external else LISTENER_IN_PROCESS
+
+
+def _check_launched(port: int, owners: Sequence[ListenerOwner], launched: LaunchedTarget,
+                    target_process: str | None) -> str:
+    if target_process is not None:
+        raise TargetNotAllowed("Başlatılmış hedef ile target_process birlikte kullanılamaz")
+    if not launched.is_alive():
+        raise TargetNotAllowed(f"Lab'in başlattığı süreç (PID {launched.pid}) artık çalışmıyor; hedef doğrulanamadı")
+    for owner in owners:
+        if owner.pid != launched.pid:
+            raise TargetNotAllowed(f"Port {port}'u Lab'in başlattığı süreç (PID {launched.pid}) dışında bir süreç "
+                                   f"dinliyor ({owner.process_name or 'adı okunamadı'}, PID {owner.pid}); "
+                                   "başlatılmamış süreçler hedef olamaz")
+    return LISTENER_LAUNCHED
 
 
 def check_target(url: str, resolver: Resolver = system_resolver) -> list[str]:

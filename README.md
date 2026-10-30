@@ -25,6 +25,8 @@ Sentetik: Manifest -> Plan (seed) -> SyntheticServer (127.0.0.1) <- Ölçüm ak�
 Kampanya: Kampanya manifesti -> (plan x seed) deney manifestleri -> her biri Sentetik akış -> campaign.json (katalog)
 Veri seti: campaign.json -> doğrulama (SHA-256, etiket/plan tutarlılığı) -> grup bazlı train/validation/test manifesti
 Telemetri: (isteğe bağlı, --telemetry) TelemetryRecorder (arka plan iş parçacığı) -> <sonuç dizini>/telemetry/ (ayrı dosya)
+HGS2:   JAR/Java/ortam doğrulaması -> sabit komut (perftest, 127.0.0.1:18080) + iş nesnesi -> başlangıç doğrulaması
+        (günlük + dinleyici tablosu) -> Ölçüm akışı (yalnızca başlatılan PID) -> durdurma + port boşalma denetimi
 ```
 
 Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `clock.py` ağ koduna (`requests`, `urllib3`,
@@ -35,7 +37,9 @@ Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `
 | `config.py` | JSON yapılandırmasını ve güvenlik sınırlarını (`limits`) yükler, doğrular |
 | `scenarios.py` | Senaryo tanımı, doğrulama, yükleme |
 | `execution.py` | Uçtan uca çalıştırma: ön kontrol, güvenlik koruması, metadata, kayıt; çalıştırma durumu |
-| `target_guard.py` | Hedef güvenliği: şema/ad izin listesi, ad çözümlemesi, loopback denetimi |
+| `target_guard.py` | Hedef güvenliği: şema/ad izin listesi, ad çözümlemesi, loopback denetimi, dinleyici kimliği (başlatılmış PID istisnası dahil) |
+| `port_owner.py` | Windows TCP dinleyici tablosu: bir portu dinleyen süreçler ve filtresiz dinleme soketleri (ağ trafiği yok) |
+| `hgs2_launch.py` | `hgs2 run`: HGS2 JAR/Java/ortam doğrulaması, sabit perftest komutu, iş nesnesi, başlangıç doğrulaması, yalnızca kendi sürecini durdurma |
 | `runner.py` | Senaryoları yürütür: ısınma + ölçüm istekleri, `seq`/`offset_ms`, süre ölçümü, güvenlik kancaları, saat çapası |
 | `clock.py` | `ClockAnchor`: monotonik başlangıç referansı ile UTC duvar saatinin birlikte kaydı |
 | `telemetry.py` | Sistem telemetrisi (F4): CPU, bellek, disk, TCP sayaçlarının zaman damgalı örneklenmesi; ayrı dosya (ağ kodu yok) |
@@ -66,7 +70,7 @@ Analiz katmanı ölçüm katmanından ayrıdır: `reader.py`, `analysis.py` ve `
 | `junit_analysis.py` | Toplu JUnit/Surefire analizi: raporlar → TestRecord → senaryo çözümlemesi → beklenti eşleştirme → sınıflandırıcı → sayaçlı JSON belge + kayıt başına iz (`scenario_trace`) (ağ yok) |
 | `scenario_mapping.py` | Senaryo eşleme sözleşmesi (`scenario_mapping_version 1`): kararlı test tanımlayıcısı (`classname#name`) → senaryo kimliği; metadata ile birleşik çözümleme, çelişki ve belirsizlikte kimlik seçilmez (ağ yok) |
 | `expectations.py` | Beklenti sözleşmesi (`expectations_version 2`): sürümlü beklentiler, doğrulama durumu, kapsam, kanıt referansları, kanıt yeterliliği, deterministik registry ve senaryo kimliğiyle eşleştirme (ağ yok) |
-| `cli.py` | `validate`, `list`, `run`, `analyze`, `synthetic validate/plan/run`, `campaign validate/run/verify`, `dataset build`, `junit classify`, `results classify` |
+| `cli.py` | `validate`, `list`, `run`, `hgs2 run`, `analyze`, `synthetic validate/plan/run`, `campaign validate/run/verify`, `dataset build`, `junit classify`, `results classify` |
 | `webui.py` | Yerel web arayüzü (yalnızca `127.0.0.1`, standart kütüphane `http.server`): senaryo listesi, kullanıcı isteğiyle sentetik deney (`run_synthetic_experiment`), mevcut analiz/sınıflandırıcıyla sonuç görünümü |
 | `_validate.py` | Ortak doğrulama yardımcıları |
 
@@ -155,6 +159,8 @@ hgs2-lab validate [--config DOSYA] [--scenarios DOSYA]
 hgs2-lab list     [--config DOSYA] [--scenarios DOSYA]
 hgs2-lab run      [--config DOSYA] [--scenarios DOSYA] [--target-label ETİKET]
                   [--telemetry [--telemetry-interval-ms N]]
+hgs2-lab hgs2 run --config DOSYA --java JAVA_EXE --jar JAR --app-dir DİZİN [--scenarios DOSYA]
+                  [--target-label ETİKET] [--telemetry [--telemetry-interval-ms N]]
 hgs2-lab analyze  --run-id RUN_ID [--results-dir DİZİN | --config DOSYA] [--output DOSYA]
                   [--seed N] [--bootstrap-resamples N] [--confidence C] [--min-tail-samples N]
 hgs2-lab synthetic validate --manifest DOSYA
@@ -188,6 +194,10 @@ hgs2-lab scenario-map validate --file DOSYA
   (istek sayıları, HTTP/taşıma hatası sayıları, ölçüm isteklerinin `duration_ms` medyan/en az/en çok değeri,
   sonuç dosyalarının yolu). `--target-label` metadata'ya `target_label` olarak yazılır. `--telemetry` (`run` ve
   `synthetic run`): sistem telemetrisini ayrı bir dosyaya yazar; bkz. "Sistem telemetrisi (F4)".
+* `hgs2 run` (yalnızca Windows): önceden derlenmiş HGS2 JAR'ını sabit `perftest` profiliyle `127.0.0.1:18080`'de
+  başlatır, başlangıcı HTTP isteği göndermeden doğrular, senaryoları yalnızca bu sürece karşı `run` ile aynı akışta
+  çalıştırır ve süreci durdurur. Profil, adres, port ve veritabanı komut satırından değiştirilemez. Ayrıntılar:
+  "Gerçek HGS2'yi perftest profiliyle başlatma (`hgs2 run`)".
 * `analyze`: kaydedilmiş bir çalıştırmanın CSV ve JSON dosyalarını okur, doğrular ve analiz dosyası yazar. **İstek
   göndermez, ağa erişmez.** Ayrıntılar: "Analiz (`analyze`)".
 * `synthetic validate` / `synthetic plan`: sentetik deney manifestini doğrular, deterministik planın özetini ve
@@ -222,6 +232,8 @@ hgs2-lab scenario-map validate --file DOSYA
 | 4 | `run`/`synthetic run` güvenlik sınırıyla durduruldu; kısmi sonuçlar `.partial` dosyalarında (sentetik deney geçersiz sayılır) |
 | 5 | Sonuçlar kaydedilemedi; `analyze`/`synthetic plan --output`: çıktı dosyası zaten var (üzerine yazılmaz) veya yazılamadı |
 | 6 | `synthetic run` tamamlandı ama deney geçersiz: gözlenen sonuçlar veya sunucu kayıtları planla uyuşmadı (gerekçeler etiket dosyasında); `campaign run`: en az bir deney geçersiz/başarısız (katalogda nedenleriyle) |
+| 7 | `hgs2 run`: HGS2 başlatılamadı ya da başlangıcı doğrulanamadı (erken sonlanma, güvenlik koruması reddi, beklenmeyen adres/port, zaman aşımı); süreç durduruldu, hiç istek yok |
+| 8 | `hgs2 run`: HGS2 süreci durdurulamadı ya da port 18080 boşalmadı; süreç ve port elle denetlenmeli (sonuçlar kaydedilmiş olabilir) |
 
 Kampanya ve veri seti komutları: `campaign run` 0 (tüm deneyler geçerli), 6 (en az biri geçersiz), 3 (çıktı dizini boş
 değil; hiç deney çalışmadı), 1 (manifest hatası), 130 (Ctrl+C); `campaign verify` 0 (sorun yok) / 1 (sorun var);
@@ -264,6 +276,8 @@ Adres: `http://127.0.0.1:8765/`. Sunucu her zaman `127.0.0.1`'e bağlanır (bağ
   listeden seçilir; kullanıcı girdisi yol veya komut olarak kullanılmaz.
 * **Kapanış (Ctrl+C):** yeni deney başlatılmaz; çalışan deney kesilmez, bitmesi beklenir (süresi manifestteki
   `limits.max_duration_seconds` ile sınırlıdır). Arayüzden deney iptali yoktur.
+* **Arayüz HGS2'yi başlatmaz.** Gerçek HGS2'nin perftest profiliyle başlatılması yalnızca komut satırındaki
+  `hgs2 run` ile yapılır; arayüzde bu aşamada böyle bir düğme veya uç yoktur.
 
 ## Çalıştırma akışı ve durumlar
 
@@ -316,7 +330,9 @@ Ayrıca:
     dinleyici tablosundan okunur (`GetExtendedTcpTable`; ağ trafiği yok). İzin yalnızca: (a) dinleyicinin tamamı bu
     Lab sürecidir (sentetik sunucu, test sunucuları), ya da (b) dinleyici başka bir süreçtir ve dosya adı
     yapılandırmadaki `target_process` ile eşleşir. **JVM ve PostgreSQL süreçleri bildirilse bile reddedilir**: gerçek
-    HGS2 (Spring Boot) bir JVM'de çalıştığı için, hangi portta başlatılırsa başlatılsın hedef olamaz. Dinleyici yoksa,
+    HGS2 (Spring Boot) bir JVM'de çalıştığı için, hangi portta başlatılırsa başlatılsın hedef olamaz. Tek istisna
+    yapılandırmayla açılamaz: `hgs2 run`, HGS2'yi kendisi başlatıp doğruladığında yalnızca o PID'i kabul eder
+    (`listener: "launched"`; bkz. "Gerçek HGS2'yi perftest profiliyle başlatma"). Dinleyici yoksa,
     süreç adı okunamıyorsa (ör. hizmet olarak çalışan süreç; bu makinedeki PostgreSQL böyledir) ya da tablo
     okunamıyorsa hedef doğrulanmamış sayılır ve `run` `PreflightError` ile reddedilir; hiçbir istek gönderilmez ve
     dosya yazılmaz. Sonuç metadata'da `execution.target_verification` (`{"port", "listener": "in_process" |
@@ -1931,6 +1947,148 @@ sonucudur.
 - HGS2 testlerine `hgs2_lab.scenario_id` özelliği eklenmedikçe gerçek raporlar yalnızca beklentisiz analiz
   edilebilir.
 - Gerçek HGS2 için doğrulanmış bir beklenti yoktur.
+
+## Gerçek HGS2'yi perftest profiliyle başlatma (`hgs2 run`)
+
+**Durum:** `hgs2_launch.py` ve `hgs2 run` birim testleriyle (sahte süreç/tablo) ve gerçek Windows bileşenleriyle
+(Popen, iş nesnesi, dinleyici tablosu; HGS2 yerine bir Python yardımcı süreci) doğrulandı. **Gerçek HGS2, Java veya
+PostgreSQL ile henüz hiç çalıştırılmadı.** Lab HGS2'yi derlemez, HGS2 kaynak kodunu veya yapılandırmasını değiştirmez,
+veritabanına bağlanmaz (veritabanına bağlanan, HGS2'nin kendisidir).
+
+### Ön koşullar (kullanıcı tarafından, Lab dışında hazırlanır)
+
+1. **HGS2 perftest profili:** `application-perftest.properties` ve `Config/PerfTestSafetyGuard.java` HGS2 deposunda
+   olmalı. Lab bunları yalnızca JAR içinde okur ve denetler.
+2. **Test veritabanı:** ayrı bir rol (süper kullanıcı değil; ör. `hgs2_perftest`) ve `hgs2_perftest_db` veritabanı.
+   Şema önceden hazır olmalı: `ddl-auto=none` olduğu için Hibernate tablo oluşturmaz. Rolün gerçek veritabanına
+   (`hibrit_giris_db`) CONNECT yetkisi olmamalı; PUBLIC'e verilmiş yetki de dahil. PerfTestSafetyGuard bunu başlangıçta
+   bir bağlantı denemesiyle doğrular; beklenen yanıt SQLState 42501'dir. Süper kullanıcı rolleri CONNECT kısıtlamasını
+   aştığı için bu denemede bağlanır ve başlatma durur.
+3. **JAR:** kullanıcı derler (ör. HGS2 dizininde `mvnw.cmd -DskipTests package`; Lab Maven çalıştırmaz). JAR doğrudan
+   `<HGS2 uygulama dizini>\target\` içinde olmalı (ör. `HGS-0.0.1-SNAPSHOT.jar`). Kaynak değiştiyse yeniden derleyin:
+   Lab yalnızca JAR'ın içeriğini denetler, kaynakla eşleştiğini denetlemez.
+4. **Java:** HGS2 `java.version` 21. `--java`, bir JDK/JRE kurulumunun `bin\java.exe` dosyası olmalı (kurulum kökünde
+   `release` dosyası beklenir). `C:\...\Oracle\Java\javapath\java.exe` gibi yönlendirici kopyalar kabul edilmez.
+5. **Ortam değişkenleri** yalnızca komutu çalıştıracağınız terminal oturumunda tanımlanır. Kalıcı (`setx`, sistem
+   ayarları) yapılmaz; dosyaya veya depoya yazılmaz. PowerShell'de parola ekrana ve komut geçmişine düşmeden:
+
+   ```powershell
+   $env:HGS_PERFTEST_DB_USERNAME = "hgs2_perftest"
+   $secure = Read-Host -Prompt "Test rolünün parolası" -AsSecureString
+   $env:HGS_PERFTEST_DB_PASSWORD = [System.Net.NetworkCredential]::new("", $secure).Password
+   Remove-Variable secure
+   # iş bitince:
+   Remove-Item Env:HGS_PERFTEST_DB_PASSWORD, Env:HGS_PERFTEST_DB_USERNAME
+   ```
+
+   İki değişken de tanımlı ve boş olmamalıdır; kullanıcı adı `postgres` olamaz. Aksi hâlde hiçbir süreç başlatılmaz.
+6. **Yapılandırma:** `base_url` tam olarak `http://127.0.0.1:18080` olmalı (`localhost` kabul edilmez: `::1`'e
+   çözümlenebilir). `target_process` kullanılmaz. Örnek (`configs/*.json` Git dışında tutulur):
+
+   ```json
+   {"base_url": "http://127.0.0.1:18080", "output_dir": "../results", "scenarios_file": "hgs2-scenarios.json",
+    "limits": {"max_requests": 200, "max_duration_seconds": 300}}
+   ```
+
+   HGS2 uçları salt okunur değildir; kimlik doğrulama uçları bile veritabanına log yazar (bkz. "Gerçek HGS2 API
+   sözleşmesi"). Senaryolar yalnızca test veritabanına yazmanın kabul edildiği uçları içermelidir.
+
+### Kullanım
+
+```powershell
+.\.venv\Scripts\python.exe -m hgs2_lab.cli hgs2 run `
+  --config configs\hgs2.json `
+  --java "C:\Program Files\<JDK 21 kurulumu>\bin\java.exe" `
+  --jar "C:\...\hgs2\hgs2-main\HGS-main\HGS\target\HGS-0.0.1-SNAPSHOT.jar" `
+  --app-dir "C:\...\hgs2\hgs2-main\HGS-main\HGS" `
+  --target-label hgs2-perftest
+```
+
+Yollar mutlak olmalı; sembolik bağlantı, junction veya 8.3 kısa ad (`CENGZE~1`) içeren yollar reddedilir. Profil, port,
+adres, JDBC hedefi ya da JVM argümanı için seçenek yoktur (`--profile`, `--port` vb. kullanım hatasıdır, kod 2).
+
+### Akış
+
+1. **Başlatmadan önce** (biri uymazsa hiçbir süreç başlatılmaz, kod 3):
+   * Yapılandırma: hedef `http://127.0.0.1:18080`; istek/süre bütçesi ve sonuç dosyası çakışması (`run` ile aynı ön
+     kontrol).
+   * Uygulama dizini: `pom.xml` (`<artifactId>HGS</artifactId>`), `HgsApplication.java`,
+     `application-perftest.properties`.
+   * JAR: ZIP içeriği **salt okunur** incelenir, JAR çalıştırılmaz. `BOOT-INF/classes/.../Config/PerfTestSafetyGuard.class`,
+     `HgsApplication.class` ve `BOOT-INF/classes/application-perftest.properties` tam bir kez bulunmalı. Profil
+     dosyasında şunlar olmalı: `server.address=127.0.0.1`, `server.port=18080`, test JDBC adresi,
+     `${HGS_PERFTEST_DB_USERNAME}`/`${HGS_PERFTEST_DB_PASSWORD}` yer tutucuları, `ddl-auto=none`,
+     `spring.sql.init.mode=never`. Profil dosyası `spring.config.*`/`spring.profiles.*` anahtarı ya da çok belgeli
+     yapı (`#---`) içeremez. SHA-256 özeti hesaplanır.
+   * Ortam: yukarıdaki iki değişken.
+   * Port: 18080'de, hangi adreste olursa olsun, dinleyen bir süreç varsa başlatma reddedilir. O süreç durdurulmaz.
+2. **Sabit komut** (`shell=False`, çalışma dizini uygulama dizini, `stdin=DEVNULL`, stdout+stderr tek boruda):
+
+   ```
+   <java.exe> -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -jar <JAR>
+     --spring.profiles.active=perftest --server.address=127.0.0.1 --server.port=18080
+     --spring.jpa.hibernate.ddl-auto=none --spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/hgs2_perftest_db
+   ```
+
+   Adres, port, ddl-auto ve JDBC argümanları profil dosyasını tekrarlayan ek bir katmandır. Kullanıcı adı ve parola
+   komut satırına **girmez**; Spring bunları profil dosyasındaki yer tutuculardan, ortamdan çözer. Komut satırında
+   `${...}` yer tutucusu kullanılmaz, çünkü Spring'in bunu çözdüğü bu depoda Java çalıştırılmadan otomatik testle
+   doğrulanamaz.
+   **Alt sürecin ortamı açık bir izin listesidir:** `SYSTEMROOT`, `WINDIR`, `SYSTEMDRIVE`, `TEMP`, `TMP` ve iki test
+   değişkeni. `SPRING_*`, `SERVER_*`, `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`, `JDK_JAVA_OPTIONS`, `CLASSPATH`, `PATH`
+   ve diğer her şey aktarılmaz.
+3. **İş nesnesi:** süreç, başlar başlamaz `KILL_ON_JOB_CLOSE` ayarlı bir Windows Job Object'e bağlanır. Lab çökse ya da
+   kapatılsa bile, tutamak kapanınca JVM ve olası alt süreçleri sonlanır. Bağlanamazsa süreç durdurulur (kod 7).
+4. **Başlangıç doğrulaması** (en çok 90 sn, HTTP isteği yok). Başarı için hepsi gerekir:
+   * süreç sonlanmamış olmalı;
+   * günlükte PerfTestSafetyGuard başarı satırı görülmeli (`perftest güvenlik denetimi geçti: 127.0.0.1:18080,
+     veritabanı hgs2_perftest_db, ddl-auto none`; Türkçe karakterler konsol kod sayfasına karşı esnek eşleşir);
+   * günlükte port açılış satırı görülmeli (`started on port 18080`; yardımcı kanıt);
+   * işletim sistemi dinleyici tablosunda başlatılan PID'in dinlediği adres/port kümesi **tam olarak
+     `{127.0.0.1:18080}`** olmalı ve portu başka bir PID dinlememeli.
+
+   Koruma reddi (`guard_failed`), erken sonlanma (`process_exited`), beklenmeyen dinleme (`unexpected_listener`:
+   `0.0.0.0`, `::`, LAN adresi, `8080`, ek bir port) ya da zaman aşımı (`startup_timeout`) durumunda süreç
+   durdurulur. Kod 7 döner ve son günlük satırları maskelenmiş olarak gösterilir.
+5. **Çalıştırma:** `run` ile aynı akış; ön kontrol, bütçe ve güvenlik sınırları aynen geçerlidir. Dinleyici denetimi
+   bu modda **yalnızca başlatılan PID'i** kabul eder (`target_guard.LaunchedTarget`, `listener: "launched"`):
+   * Yabancı bir `java.exe`, adı Java olduğu için güvenilir sayılmaz.
+   * Başlatılan süreç ölürse yeni bağlantılar reddedilir; port başka bir sürece geçmiş olabilir.
+   * Loopback, ayrılmış port ve proxy kuralları değişmez.
+6. **Durdurma** (her durumda, hata ya da Ctrl+C dahil):
+   * Yalnızca modülün oluşturduğu `Popen` tutamağı (`terminate`) ve kendi iş nesnesi (`TerminateJobObject`)
+     kullanılır. Tablodan PID seçilmez; ad ile (`taskkill /IM java.exe`) süreç sonlandırılmaz.
+   * Ardından sürecin bittiği ve 18080'in boşaldığı doğrulanır. Doğrulanamazsa kod 8 döner; süreci elle denetleyin.
+   * **Neden `terminate`/iş nesnesi:** Windows'ta `Popen.terminate()` ve `taskkill /F` aynı TerminateProcess
+     çağrısıdır. Zorlamasız `taskkill`, penceresi olmayan JVM'de çoğunlukla etkisizdir. `/IM` başka bir JVM'i (ör.
+     gerçek HGS2) hedefleyebilir. `/PID` ise PID yeniden kullanımına açıktır. Açık `Popen` tutamağı PID'in başka bir
+     sürece verilmesini engeller.
+   * Ani sonlandırmada Spring'in kapanma kancaları çalışmaz ve açık işlemler PostgreSQL tarafında geri alınır. Bu,
+     yalnızca test veritabanında ve `ddl-auto=none` ile kabul edilir.
+
+Metadata (`execution`):
+* `target_verification`: `{"port": 18080, "listener": "launched", "pid": …}`.
+* `hgs2_launch`: profil, adres, port, veritabanı adı, Java ve JAR yolu, JAR SHA-256 ve boyutu, PID, başlangıç süresi,
+  başlangıç kanıtı (`listeners`) ve alt süreç ortamındaki değişken **adları**.
+
+Parola hiçbir çıktıda yer almaz: komut satırında, hata mesajlarında, günlük kuyruğunda (birebir değer ve `sanitize.py`
+kurallarıyla maskelenir) ve metadata'da bulunmaz.
+
+### Bilinen sınırlamalar
+
+* Yalnızca Windows'ta çalışır (dinleyici tablosu ve iş nesnesi).
+* JAR doğrulaması ile başlatma arasında dosya değiştirilebilir. Özet başlatmadan hemen önce alınır, ama dosya
+  kilitlenmez.
+* Süreç başladıktan hemen sonra iş nesnesine bağlanır. Aradaki çok kısa sürede başlatılan bir alt süreç iş nesnesinin
+  dışında kalabilir; java.exe bu aşamada alt süreç başlatmaz.
+* Günlük satırları yardımcı işarettir. Asıl kanıt dinleyici tablosudur, o da okunduğu ana aittir. Spring Boot'un
+  günlük biçimi değiştirilirse ve koruma satırında sınıf adı görünmezse başlatma zaman aşımıyla reddedilir (güvenli
+  taraf).
+* JVM, başlangıçta geçici bir loopback dinleyici açarsa (ör. eski JDK'larda seçici uyandırma soketi) bu "beklenmeyen
+  port" sayılır ve başlatma reddedilir (güvenli taraf). JDK 16+ ile Windows 10+'da bu soket AF_UNIX'tir ve tabloda
+  görünmez.
+* Kullanıcı adı denetimi yalnızca `postgres` adını tanır. Başka adlı bir süper kullanıcıyı, PerfTestSafetyGuard'ın
+  gerçek veritabanına bağlanma denemesi yakalar; Lab yakalamaz.
 
 ## Gerçek HGS2 API sözleşmesi (kaynak koddan statik; N11, 2026-10-29)
 

@@ -18,6 +18,8 @@ from hgs2_lab.scenarios import Scenario
 from hgs2_lab.target_guard import (
     LISTENER_DECLARED_EXTERNAL,
     LISTENER_IN_PROCESS,
+    LISTENER_LAUNCHED,
+    LaunchedTarget,
     ListenerOwner,
     TargetNotAllowed,
     check_listener,
@@ -66,6 +68,94 @@ def test_listener_allowed(owners, target_process, expected):
 def test_listener_refused(owners, target_process, match):
     with pytest.raises(TargetNotAllowed, match=match):
         check_listener(50000, owners, own_pid=OWN, target_process=target_process)
+
+
+# --- başlatılmış hedef (hgs2 run): JVM kuralının tek istisnası, yalnızca doğrulanmış PID için ---
+LAUNCHED = OTHER + 10
+
+
+def launched(pid=LAUNCHED, alive=True):
+    return LaunchedTarget(pid=pid, is_alive=lambda: alive)
+
+
+@pytest.mark.parametrize("owners", [
+    [owner(LAUNCHED, "java.exe")],
+    [owner(LAUNCHED, "java.exe"), owner(LAUNCHED, "java.exe", "::ffff:127.0.0.1")],
+    [owner(LAUNCHED, None)],  # PID kanıtı yeterli; ad okunamasa da başka sürece ait değil
+])
+def test_launched_pid_is_the_only_accepted_jvm(owners):
+    assert check_listener(18080, owners, own_pid=OWN, launched=launched()) == LISTENER_LAUNCHED
+
+
+@pytest.mark.parametrize("owners, target, match", [
+    ([owner(OTHER, "java.exe")], launched(), "dışında bir süreç"),  # yabancı Java: adı Java diye güvenilmez
+    ([owner(LAUNCHED, "java.exe"), owner(OTHER, "java.exe", "0.0.0.0")], launched(), "dışında bir süreç"),
+    ([owner(OTHER, "python.exe")], launched(), "dışında bir süreç"),  # dış süreç istisnası bu modda geçmez
+    ([owner()], launched(), "dışında bir süreç"),  # Lab'in kendi süreç içi sunucusu da
+    ([owner(LAUNCHED, "java.exe")], launched(alive=False), "artık çalışmıyor"),
+    ([], launched(), "dinleyen süreç bulunamadı"),
+])
+def test_launched_mode_refuses_everything_else(owners, target, match):
+    with pytest.raises(TargetNotAllowed, match=match):
+        check_listener(18080, owners, own_pid=OWN, launched=target)
+
+
+def test_launched_mode_cannot_be_combined_with_target_process():
+    with pytest.raises(TargetNotAllowed, match="birlikte"):
+        check_listener(18080, [owner(LAUNCHED, "java.exe")], own_pid=OWN, target_process="python.exe",
+                       launched=launched())
+
+
+@pytest.mark.parametrize("name", ["java.exe", "javaw.exe", "postgres.exe", "pg_ctl.exe"])
+def test_without_launched_target_jvm_and_postgres_stay_refused(name):
+    with pytest.raises(TargetNotAllowed, match="JVM/PostgreSQL"):
+        check_listener(18080, [owner(LAUNCHED, name)], own_pid=OWN)
+    with pytest.raises(TargetNotAllowed, match="JVM/PostgreSQL"):
+        check_listener(18080, [owner(LAUNCHED, name)], own_pid=OWN, target_process="python.exe")
+
+
+def test_launched_verifier_rechecks_liveness_even_for_a_cached_port():
+    state = {"alive": True}
+    calls = []
+    verifier = _ListenerVerifier(lambda port: calls.append(port) or [owner(LAUNCHED, "java.exe")], None,
+                                 LaunchedTarget(pid=LAUNCHED, is_alive=lambda: state["alive"]))
+    assert verifier.verify(18080, require_listener=True) == LISTENER_LAUNCHED
+    assert verifier.verify(18080, require_listener=False) == LISTENER_LAUNCHED and calls == [18080]
+    state["alive"] = False  # süreç öldü: portu başka biri alabilir
+    with pytest.raises(TargetNotAllowed, match="artık çalışmıyor"):
+        verifier.verify(18080, require_listener=False)
+
+
+def test_transport_verify_target_records_launched_pid_and_keeps_other_checks():
+    with RequestsTransport(resolver=loopback, listener_lookup=lambda p: [owner(LAUNCHED, "java.exe")],
+                           launched=launched()) as transport:
+        assert transport.verify_target("http://127.0.0.1:18080/") == {
+            "port": 18080, "listener": LISTENER_LAUNCHED, "pid": LAUNCHED}
+        with pytest.raises(TargetNotAllowed, match="ayrılmış"):
+            transport.verify_target("http://127.0.0.1:8080/")  # ayrılmış port bu modda da kapalı
+        with pytest.raises(TargetNotAllowed):
+            transport.verify_target("http://203.0.113.5:18080/")  # loopback dışı
+    with RequestsTransport(resolver=loopback, listener_lookup=lambda p: [owner(OTHER, "java.exe")],
+                           launched=launched()) as transport:
+        with pytest.raises(TargetNotAllowed, match="dışında bir süreç"):
+            transport.verify_target("http://127.0.0.1:18080/")
+
+
+def test_launched_connection_layer_refuses_foreign_jvm_before_opening_a_socket():
+    verifier = _ListenerVerifier(lambda port: [owner(OTHER, "java.exe", "0.0.0.0")], None, launched())
+    connection_cls = _guarded_pool_classes(loopback, verifier)["http"].ConnectionCls
+    with pytest.raises(TargetNotAllowed, match="dışında bir süreç"):
+        connection_cls("127.0.0.1", 18080)._new_conn()
+
+
+def test_launched_session_still_refuses_proxies():
+    import requests
+
+    session = requests.Session()
+    session.trust_env = False
+    with RequestsTransport(session=session, resolver=loopback, launched=launched()):
+        with pytest.raises(TargetNotAllowed, match="Proxy"):
+            session.get_adapter("http://127.0.0.1:18080/").proxy_manager_for("http://proxy.example:3128")
 
 
 @pytest.mark.parametrize("name", ["python.exe", "python", "my-server_1.exe"])
@@ -177,6 +267,76 @@ def test_fake_transports_are_not_listener_checked(tmp_path, monkeypatch):
                           listener_lookup=lambda p: pytest.fail("sahte taşıyıcıda dinleyici okunmamalı"))
     assert outcome.completed
     assert "target_verification" not in json.loads(outcome.json_path.read_text(encoding="utf-8"))["execution"]
+
+
+@pytest.mark.parametrize("owners, target, extra, match", [
+    ([owner(OTHER, "java.exe")], launched(), {}, "dışında bir süreç"),  # başlatılmamış yabancı Java
+    ([owner(LAUNCHED, "java.exe")], launched(alive=False), {}, "artık çalışmıyor"),
+    ([owner(LAUNCHED, "java.exe")], launched(), {"target_process": "python.exe"}, "birlikte"),
+])
+def test_launched_run_is_rejected_before_any_request(tmp_path, monkeypatch, owners, target, extra, match):
+    monkeypatch.setattr(execution, "code_info", lambda: {"git_commit": None, "git_dirty": None})
+    with pytest.raises(PreflightError, match=match):
+        execute_run(_config(tmp_path, 18080, **extra), [Scenario(name="a", method="POST", path="/api/auth/kart-okut")],
+                    config_path=None, resolver=loopback, listener_lookup=lambda p: owners, launched=target,
+                    launch_metadata={"pid": target.pid})
+    assert not (tmp_path / "results").exists()
+
+
+def test_launched_target_reaches_the_real_transport_and_metadata(tmp_path, monkeypatch):
+    """Varsayılan taşıyıcı `launched` ile kurulur; doğrulama ve başlatma kanıtı metadata'ya yazılır (ağ yok)."""
+    from hgs2_lab.transport import TransportResponse
+
+    created = []
+
+    class RecordingTransport:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+        def verify_target(self, url):
+            return {"port": 18080, "listener": LISTENER_LAUNCHED, "pid": LAUNCHED}
+
+        def send(self, scenario, url, timeout_seconds):
+            return TransportResponse(200, 2, 1.0, body=b"OK", content_type="text/plain")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(execution, "code_info", lambda: {"git_commit": None, "git_dirty": None})
+    monkeypatch.setattr(execution, "RequestsTransport", RecordingTransport)
+    target = launched()
+    outcome = execute_run(_config(tmp_path, 18080), [Scenario(name="a", method="GET", path="/x")], config_path=None,
+                          resolver=loopback, launched=target, launch_metadata={"profile": "perftest", "pid": LAUNCHED})
+    assert outcome.completed and created[0]["launched"] is target and "target_process" not in created[0]
+    recorded = json.loads(outcome.json_path.read_text(encoding="utf-8"))["execution"]
+    assert recorded["target_verification"] == {"port": 18080, "listener": LISTENER_LAUNCHED, "pid": LAUNCHED}
+    assert recorded["hgs2_launch"] == {"profile": "perftest", "pid": LAUNCHED}
+
+
+def test_runs_without_launched_target_do_not_record_launch_metadata(tmp_path, monkeypatch):
+    from hgs2_lab.transport import TransportResponse
+
+    created = []
+
+    class RecordingTransport:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+        def verify_target(self, url):
+            return {"port": 18081, "listener": LISTENER_IN_PROCESS}
+
+        def send(self, scenario, url, timeout_seconds):
+            return TransportResponse(200, 2, 1.0, body=b"OK", content_type="text/plain")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(execution, "code_info", lambda: {"git_commit": None, "git_dirty": None})
+    monkeypatch.setattr(execution, "RequestsTransport", RecordingTransport)
+    outcome = execute_run(_config(tmp_path, 18081), [Scenario(name="a", method="GET", path="/x")], config_path=None,
+                          resolver=loopback)
+    assert "launched" not in created[0]
+    assert "hgs2_launch" not in json.loads(outcome.json_path.read_text(encoding="utf-8"))["execution"]
 
 
 # --- yapılandırma (yüklemedeki ön denetim) ---

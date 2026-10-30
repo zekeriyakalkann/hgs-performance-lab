@@ -1,8 +1,9 @@
 """Dış hedef süreç adı kuralları (N12; ağ ve soket kodu içermez: config.py ve analiz modülleri güvenle içe aktarır).
 
 `target_process`, hedef portu Lab süreci dışında bir süreç dinliyorsa o sürecin dosya adıdır (ör. `python.exe`).
-JVM ve PostgreSQL süreçleri her koşulda reddedilir: gerçek HGS2 (Spring Boot) bir JVM'de çalışır; HGS2 test profili ve
-kimlik işareti doğrulanana kadar hiçbir HGS2 örneği hedef olamaz. Denetimin kendisi target_guard.check_listener'dadır.
+JVM ve PostgreSQL süreçleri bu yolla hiçbir koşulda hedef olamaz: gerçek HGS2 (Spring Boot) bir JVM'de çalışır. Tek
+istisna yapılandırmayla açılamaz: `hgs2 run`, HGS2'yi perftest profiliyle kendisi başlatıp doğruladığında yalnızca o
+PID'i kabul eder (target_guard.LaunchedTarget). Denetimin kendisi target_guard.check_listener'dadır.
 """
 
 from __future__ import annotations

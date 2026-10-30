@@ -7,6 +7,10 @@ söylemez; aynı makinedeki gerçek HGS2 de 127.0.0.1'de dinleyebilir. Bu modül
 Yalnızca Windows desteklenir (iphlpapi `GetExtendedTcpTable`, kernel32 `QueryFullProcessImageNameW`). Başka platformda
 `ListenerLookupError` fırlatılır; çağıran taraf bunu "doğrulanamadı" olarak ele alır ve hedefi reddeder (güvenli taraf).
 
+`system_listening_sockets` aynı tablonun filtresiz hâlidir (her adres ve port; süreç adı okunmaz): hgs2_launch.py
+başlattığı sürecin dinlediği adres/port kümesini bununla doğrular (0.0.0.0, LAN adresi, 8080 vb. görünür olsun diye
+loopback süzgeci uygulanmaz).
+
 Sınırlar: tablo okunduğu andaki durumu verir (okuma ile bağlantı arasında dinleyici değişebilir); süreç adı bir kimlik
 kanıtı değildir (başka adlı bir vekil süreç gerçek sisteme yönlendirebilir).
 """
@@ -17,6 +21,7 @@ import ipaddress
 import ntpath
 import socket
 import sys
+from dataclasses import dataclass
 
 from .target_guard import ListenerOwner
 
@@ -28,6 +33,15 @@ _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 class ListenerLookupError(OSError):
     """Dinleyen süreçler okunamadı (desteklenmeyen platform veya işletim sistemi hatası)."""
+
+
+@dataclass(frozen=True)
+class ListeningSocket:
+    """Dinleme durumundaki bir TCP soketi: sahibi süreç, yerel adres (IPv4 ya da IPv6 metni) ve port."""
+
+    pid: int
+    address: str
+    port: int
 
 
 def _accepts_loopback(address: str) -> bool:
@@ -95,25 +109,31 @@ if sys.platform == "win32":
         finally:
             _CloseHandle(handle)
 
+    def system_listening_sockets() -> list[ListeningSocket]:
+        """Bu makinedeki tüm dinleme durumundaki TCP soketleri (IPv4 ve IPv6; adres süzgeci yok)."""
+        found = [ListeningSocket(row.pid, socket.inet_ntoa(int(row.local_addr).to_bytes(4, "little")),
+                                 socket.ntohs(row.local_port & 0xFFFF))
+                 for row in _rows(_AF_INET, _Row4)]
+        found += [ListeningSocket(row.pid, socket.inet_ntop(socket.AF_INET6, bytes(row.local_addr)),
+                                  socket.ntohs(row.local_port & 0xFFFF))
+                  for row in _rows(_AF_INET6, _Row6)]
+        return found
+
     def system_listener_lookup(port: int) -> list[ListenerOwner]:
         """`port`'ta loopback bağlantısı kabul eden (loopback veya joker adresli) TCP dinleyicileri."""
-        found: list[tuple[int, str]] = []
-        for row in _rows(_AF_INET, _Row4):
-            if socket.ntohs(row.local_port & 0xFFFF) == port:
-                found.append((row.pid, socket.inet_ntoa(int(row.local_addr).to_bytes(4, "little"))))
-        for row in _rows(_AF_INET6, _Row6):
-            if socket.ntohs(row.local_port & 0xFFFF) == port:
-                found.append((row.pid, socket.inet_ntop(socket.AF_INET6, bytes(row.local_addr))))
         names: dict[int, str | None] = {}
         owners = []
-        for pid, address in found:
-            if _accepts_loopback(address):
-                if pid not in names:
-                    names[pid] = _process_name(pid)
-                owners.append(ListenerOwner(pid=pid, process_name=names[pid], address=address))
+        for sock in system_listening_sockets():
+            if sock.port == port and _accepts_loopback(sock.address):
+                if sock.pid not in names:
+                    names[sock.pid] = _process_name(sock.pid)
+                owners.append(ListenerOwner(pid=sock.pid, process_name=names[sock.pid], address=sock.address))
         return owners
 
 else:
+
+    def system_listening_sockets() -> list[ListeningSocket]:
+        raise ListenerLookupError(f"Dinleyen süreç denetimi bu platformda desteklenmiyor ({sys.platform})")
 
     def system_listener_lookup(port: int) -> list[ListenerOwner]:
         raise ListenerLookupError(f"Dinleyen süreç denetimi bu platformda desteklenmiyor ({sys.platform})")

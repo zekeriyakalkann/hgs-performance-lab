@@ -11,6 +11,9 @@ Akış:
    ayrılmış port ve hedef portu dinleyen sürecin kimliği (bkz. target_guard.check_listener). Uymazsa taşıyıcı
    kapatılır, `PreflightError` fırlatılır; hiçbir istek gönderilmez ve dosya yazılmaz. Sonuç metadata'da
    `execution.target_verification` olarak kaydedilir. Sahte taşıyıcılar (testler) ağ kullanmadığı için denetlenmez.
+   `launched` (yalnızca `hgs2 run`, bkz. hgs2_launch.py): Lab'in başlatıp doğruladığı süreç; dinleyici denetiminde
+   yalnızca o PID kabul edilir. `launch_metadata` (JAR özeti, profil, hedef, başlangıç kanıtı; gizli değer içermez)
+   `execution.hgs2_launch` olarak kaydedilir.
 3. Runner, `SafetyGuard` ile çalışır: süre sınırı, art arda taşıma hatası ve hata oranı eşiği.
 4. Sonuç ne olursa olsun taşıyıcı kapatılır, tamamlanan kayıtlar metadata ile kaydedilir.
 5. İsteğe bağlı telemetri (`telemetry`): istekler boyunca örneklenir ve sonuçlardan SONRA ayrı dosyaya yazılır
@@ -53,7 +56,7 @@ from .sanitize import sanitize_text
 from .scenarios import Scenario
 from .storage import ResultStore
 from .port_owner import system_listener_lookup
-from .target_guard import ListenerLookup, Resolver, TargetNotAllowed, check_target, system_resolver
+from .target_guard import LaunchedTarget, ListenerLookup, Resolver, TargetNotAllowed, check_target, system_resolver
 from .telemetry import TelemetryRecorder
 from .telemetry import output_paths as telemetry_output_paths
 from .transport import Transport
@@ -197,6 +200,8 @@ def execute_run(
     synthetic: dict[str, Any] | None = None,
     telemetry: TelemetryRecorder | None = None,
     listener_lookup: ListenerLookup = system_listener_lookup,
+    launched: LaunchedTarget | None = None,
+    launch_metadata: dict[str, Any] | None = None,
 ) -> RunOutcome:
     """Bir çalıştırmayı uçtan uca yürütür ve sonuçları kaydeder.
 
@@ -215,6 +220,8 @@ def execute_run(
         run_id = validate_run_id(run_id) if run_id is not None else generate_run_id()
     except ValueError as exc:
         raise PreflightError(str(exc)) from exc
+    if launched is not None and config.target_process is not None:
+        raise PreflightError("Başlatılmış hedef ile target_process birlikte kullanılamaz")
     store = ResultStore(config.output_dir)
     planned = preflight(config, scenarios, store=store, run_id=run_id, resolver=resolver)
     if telemetry is not None:
@@ -234,6 +241,8 @@ def execute_run(
             extra["listener_lookup"] = listener_lookup
         if config.target_process is not None:
             extra["target_process"] = config.target_process
+        if launched is not None:
+            extra["launched"] = launched
         return RequestsTransport(resolver=resolver, **extra)
 
     transport = (transport_factory or default_transport)()
@@ -281,6 +290,8 @@ def execute_run(
     }
     if target_verification is not None:
         execution["target_verification"] = target_verification
+    if launch_metadata is not None:
+        execution["hgs2_launch"] = launch_metadata
     metadata = build_run_metadata(
         config, scenarios, started_at, now(),
         config_path=config_path, monotonic_duration_ms=runner.monotonic_duration_ms,

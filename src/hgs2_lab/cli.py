@@ -5,6 +5,11 @@ Komutlar:
 * list:     senaryoları listeler (istek göndermez).
 * run:      senaryoları YALNIZCA loopback hedefe karşı çalıştırır ve sonuçları kaydeder.
             `run` ve `synthetic run` için `--telemetry`: sistem telemetrisini ayrı dosyaya yazar (bkz. telemetry.py).
+* hgs2 run: önceden derlenmiş HGS2 JAR'ını perftest profiliyle 127.0.0.1:18080'de başlatır, başlangıcı HTTP isteği
+            göndermeden doğrular, senaryoları yalnızca bu sürece karşı çalıştırır ve süreci durdurur (hgs2_launch.py;
+            yalnızca Windows). Profil, adres, port ve JDBC hedefi sabittir; komut satırından değiştirilemez.
+            7 = HGS2 başlatılamadı ya da başlangıcı doğrulanamadı (süreç durduruldu), 8 = HGS2 durdurulamadı ya da
+            port boşalmadı (elle denetim gerekir); diğer kodlar `run` ile aynı.
 * analyze:  kaydedilmiş bir çalıştırmanın CSV/JSON dosyalarını çevrimdışı analiz eder (istek göndermez).
 * synthetic validate|plan|run: uygulamanın kendi yerel sentetik sunucusuyla planlı hata deneyleri
   (gerçek HGS2 değildir; bkz. synthetic.py).
@@ -48,6 +53,8 @@ dataset build: 0 = yazıldı (uyarılar dosyada), 1 = doğrulama/politika/bütü
   4   run/synthetic run güvenlik sınırıyla durduruldu; kısmi sonuçlar `.partial` dosyalarında
   5   sonuçlar kaydedilemedi; analyze/synthetic plan: çıktı dosyası zaten var veya yazılamadı
   6   synthetic run tamamlandı ama deney geçersiz (gözlenen sonuçlar planla uyuşmadı; gerekçeler etiket dosyasında)
+  7   hgs2 run: HGS2 başlatılamadı ya da başlangıcı doğrulanamadı; süreç durduruldu, hiçbir istek gönderilmedi
+  8   hgs2 run: HGS2 süreci durdurulamadı ya da port 18080 boşalmadı (elle denetim gerekir)
   130 run kullanıcı tarafından (Ctrl+C) durduruldu; kısmi sonuçlar `.partial` dosyalarında
 """
 
@@ -58,6 +65,7 @@ import dataclasses
 import hashlib
 import json
 import sys
+from urllib.parse import urlsplit
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
@@ -83,8 +91,11 @@ from .execution import (
     PreflightError,
     RunOutcome,
     execute_run,
+    generate_run_id,
+    preflight,
     summarize,
 )
+from . import hgs2_launch
 from .junit_analysis import build_junit_analysis_document, parse_reports
 from .models import InvalidRunId
 from .reader import load_run
@@ -97,7 +108,8 @@ from .readiness import run_readiness
 from .result_analysis import ExpectationsError, build_run_document, load_expectations, resolve_dataset_kind
 from .robust_z import BASELINE_DEGENERATE, CalibrationError
 from .scenarios import Scenario, ScenarioError, load_scenarios
-from .storage import StorageError
+from .sanitize import sanitize_url
+from .storage import ResultStore, StorageError
 from .synthetic import (
     ManifestError,
     SyntheticManifest,
@@ -117,6 +129,8 @@ EXIT_REJECTED = 3
 EXIT_ABORTED = 4
 EXIT_STORAGE_ERROR = 5
 EXIT_SYNTHETIC_INVALID = 6
+EXIT_TARGET_START_FAILED = 7
+EXIT_TARGET_STOP_FAILED = 8
 EXIT_INTERRUPTED = 130
 
 _EXIT_BY_STATUS = {STATUS_COMPLETED: EXIT_OK, STATUS_ABORTED: EXIT_ABORTED, STATUS_INTERRUPTED: EXIT_INTERRUPTED}
@@ -163,8 +177,24 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--target-label", help="Hedef ortam etiketi; metadata'ya target_label olarak yazılır")
             _add_telemetry_arguments(p)
 
+    p = sub.add_parser("hgs2", help="Gerçek HGS2'yi izole perftest profiliyle başlat ve ölç (yalnızca Windows)")
+    hgs2_sub = p.add_subparsers(dest="hgs2_command", required=True)
+    q = hgs2_sub.add_parser(
+        "run", allow_abbrev=False,
+        help=f"Önceden derlenmiş HGS2 JAR'ını perftest profiliyle {hgs2_launch.BASE_URL}'de başlat, başlangıcı "
+             "doğrula, senaryoları çalıştır, süreci durdur. Profil, port ve veritabanı sabittir.")
+    q.add_argument("--config", required=True,
+                   help=f"Yapılandırma dosyası; base_url tam olarak {hgs2_launch.BASE_URL} olmalı")
+    q.add_argument("--scenarios", help="Senaryo dosyası; verilirse yapılandırmadaki scenarios_file yerine kullanılır")
+    q.add_argument("--java", required=True, help="java.exe'nin mutlak yolu (JDK/JRE kurulumunun bin dizini)")
+    q.add_argument("--jar", required=True,
+                   help="Önceden derlenmiş HGS2 JAR'ının mutlak yolu (doğrudan <app-dir>\\target\\ içinde)")
+    q.add_argument("--app-dir", required=True, help="HGS2 uygulama dizininin mutlak yolu (pom.xml'in bulunduğu dizin)")
+    q.add_argument("--target-label", help="Hedef ortam etiketi; metadata'ya target_label olarak yazılır")
+    _add_telemetry_arguments(q)
+
     defaults = AnalysisParams()
-    p = sub.add_parser("analyze", help="Kaydedilmiş bir çalıştırmayı çevrimdışı analiz et (istek göndermez)")
+    p = sub.add_parser("analyze",help="Kaydedilmiş bir çalıştırmayı çevrimdışı analiz et (istek göndermez)")
     p.add_argument("--run-id", required=True, help="Analiz edilecek run_id (tam veya .partial dosyalar otomatik bulunur)")
     p.add_argument("--results-dir",
                    help="Sonuç dizini; verilmezse yapılandırmadaki output_dir kullanılır (çalışma dizinine göre)")
@@ -349,6 +379,98 @@ def _run(args: argparse.Namespace, config: LabConfig, scenarios: list[Scenario])
     _print_outcome(outcome)
     _print_telemetry(outcome, telemetry)
     return _EXIT_BY_STATUS[outcome.status]
+
+
+def _hgs2_config_problem(config: LabConfig) -> str | None:
+    """`hgs2 run` yalnızca sabit hedefe çalışır; dış süreç bildirimi bu modda anlamsızdır."""
+    parts = urlsplit(config.base_url)
+    if (parts.scheme, parts.hostname, parts.port) != ("http", hgs2_launch.ADDRESS, hgs2_launch.PORT) \
+            or parts.path not in ("", "/"):
+        return f"hgs2 run yalnızca {hgs2_launch.BASE_URL} hedefine çalışır (yapılandırmadaki base_url: " \
+               f"{sanitize_url(config.base_url)})"
+    if config.target_process is not None:
+        return "hgs2 run ile target_process kullanılamaz (hedef, Lab'in başlattığı süreçtir)"
+    return None
+
+
+def _print_launch_failure(exc: hgs2_launch.Hgs2LaunchError) -> None:
+    print(f"HGS2 başlatılamadı ({exc.reason}): {exc}. Hiçbir HTTP isteği gönderilmedi.", file=sys.stderr)
+    if exc.log_tail:
+        print("Son HGS2 günlük satırları (maskelenmiş):", file=sys.stderr)
+        for line in exc.log_tail:
+            print(f"  | {line}", file=sys.stderr)
+
+
+def _print_stop(report: hgs2_launch.StopReport) -> None:
+    if report.ok:
+        how = "Lab tarafından durduruldu" if report.terminated_by_lab else "zaten sonlanmıştı"
+        print(f"HGS2 süreci (PID {report.pid}) {how}; port {hgs2_launch.PORT} boşaldı.")
+    else:
+        print(f"HATA: HGS2 süreci (PID {report.pid}) durdurması doğrulanamadı: {report.detail}. Port "
+              f"{hgs2_launch.PORT}'u ve süreci elle denetleyin.", file=sys.stderr)
+
+
+def _hgs2_run(args: argparse.Namespace) -> int:
+    try:
+        config, scenarios = _load(args)
+    except (ConfigError, ScenarioError) as exc:
+        print(f"Hata: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    problem = _hgs2_config_problem(config)
+    if problem is not None:
+        print(f"Çalıştırma reddedildi, HGS2 başlatılmadı: {problem}", file=sys.stderr)
+        return EXIT_REJECTED
+    run_id = generate_run_id()
+    try:
+        telemetry = _telemetry_recorder(args)
+        # Bütçe, hedef metni ve dosya çakışması HGS2 başlatılmadan önce denetlenir; execute_run aynısını tekrarlar.
+        preflight(config, scenarios, store=ResultStore(config.output_dir), run_id=run_id)
+        plan = hgs2_launch.prepare_launch(java=args.java, jar=args.jar, app_dir=args.app_dir)
+    except PreflightError as exc:
+        print(f"Çalıştırma reddedildi, HGS2 başlatılmadı: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+    except hgs2_launch.Hgs2LaunchError as exc:
+        print(f"Çalıştırma reddedildi, HGS2 başlatılmadı ({exc.reason}): {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+
+    print(f"HGS2 başlatılıyor: profil {hgs2_launch.PROFILE}, {hgs2_launch.BASE_URL}, veritabanı "
+          f"{hgs2_launch.DATABASE}; JAR {plan.jar.path.name} (SHA-256 {plan.jar.sha256}); başlangıç en çok "
+          f"{hgs2_launch.STARTUP_TIMEOUT_SECONDS:g} sn izlenir.", flush=True)
+    try:
+        process = hgs2_launch.launch(plan)
+    except hgs2_launch.Hgs2LaunchError as exc:
+        _print_launch_failure(exc)
+        return EXIT_TARGET_START_FAILED
+    except KeyboardInterrupt:
+        print("Başlatma kullanıcı tarafından durduruldu (Ctrl+C); HGS2 süreci sonlandırıldı.", file=sys.stderr)
+        return EXIT_INTERRUPTED
+    print(f"HGS2 hazır: PID {process.pid}, dinleme {', '.join(process.observed_listeners)}, "
+          f"{process.ready_after_seconds:.1f} sn.", flush=True)
+
+    code = EXIT_ERROR
+    try:
+        outcome = execute_run(
+            config, scenarios, config_path=Path(args.config).resolve(), target_label=args.target_label,
+            run_id=run_id, telemetry=telemetry, launched=process.target(),
+            launch_metadata=hgs2_launch.launch_metadata(plan, process),
+        )
+        _print_outcome(outcome)
+        _print_telemetry(outcome, telemetry)
+        code = _EXIT_BY_STATUS[outcome.status]
+    except PreflightError as exc:
+        print(f"Çalıştırma reddedildi, hiçbir istek gönderilmedi: {exc}", file=sys.stderr)
+        code = EXIT_REJECTED
+    except StorageError as exc:
+        print(f"Sonuçlar kaydedilemedi: {exc}", file=sys.stderr)
+        code = EXIT_STORAGE_ERROR
+    finally:
+        report = process.stop()
+        _print_stop(report)
+    return code if report.ok else EXIT_TARGET_STOP_FAILED
+
+
+def _hgs2(args: argparse.Namespace) -> int:
+    return _hgs2_run(args)  # tek alt komut: run
 
 
 def _fmt_ms(entry: dict) -> str:
@@ -884,6 +1006,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _ingest(args)
     if args.command == "scenario-map":
         return _scenario_map(args)
+    if args.command == "hgs2":
+        return _hgs2(args)
 
     try:
         config, scenarios = _load(args)
