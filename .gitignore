@@ -1,30 +1,32 @@
+# Depo geneli dışlama kuralları. Her proje ayrıca kendi .gitignore dosyasını taşır
+# (projects/performance-lab/.gitignore, projects/hgs2/hgs2-main/HGS-main/HGS/.gitignore).
+
+# Python
 __pycache__/
+*.py[cod]
 *.egg-info/
 .venv/
+venv/
 .pytest_cache/
-results/*
-!results/.gitkeep
+
+# Java / Maven
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE ve işletim sistemi
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Gizli bilgi ve ortama özel dosyalar
 .env
-
-# Python derleme ve paketleme çıktıları
-*.py[cod]
-build/
-dist/
-
-# Ortama özel değişken dosyaları (.env yukarıda)
 .env.*
-
-# Yerel yapılandırma ve senaryolar: gerçek hedef adresi, token veya parola içerebilir.
-# configs/ altındaki (alt dizinler dahil) tüm JSON dosyaları dışarıda kalır; yalnızca
-# açıkça adlandırılmış örnekler (*.example.json) izlenir. configs/ dizininin kendisi
-# hariç tutulmadığı için bu istisna çalışır.
-configs/**/*.json
-!configs/**/*.example.json
-
-# Kimlik bilgisi dosyaları (ör. HTTPS istemci sertifikası ve anahtarı, .netrc)
 *.pem
 *.key
 *.p12
 *.pfx
 .netrc
 _netrc
+.pgpass
+pgpass.conf

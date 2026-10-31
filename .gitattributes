@@ -1,3 +1,12 @@
-* text=auto
-# Altın örnek sonuç dosyaları bayt bayt korunur (satır sonu dönüşümü yok; SHA-256 özetleri değişmez).
-tests/golden/** -text
+# Her proje kendi .gitattributes dosyasını korur (projects/performance-lab/.gitattributes,
+# projects/hgs2/hgs2-main/HGS-main/HGS/.gitattributes). Burada depo geneli "* text=auto" bilinçli olarak YOK:
+# içe aktarılan HGS2 geçmişindeki dosyaları yeniden normalleştirip sahte değişiklik üretirdi.
+
+# Denetim kanıtları bayt bayt saklanır; SHA-256 manifestleri (FINAL_SHA256SUMS.txt vb.) doğrulanabilir kalmalı.
+projects/lab-artifacts/** -text
+
+# Kök belgeler ve betikler
+/*.md text=auto
+docs/** text=auto
+scripts/*.sh text eol=lf
+scripts/*.ps1 text eol=crlf

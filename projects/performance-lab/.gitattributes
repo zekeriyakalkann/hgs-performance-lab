@@ -1,0 +1,3 @@
+* text=auto
+# Altın örnek sonuç dosyaları bayt bayt korunur (satır sonu dönüşümü yok; SHA-256 özetleri değişmez).
+tests/golden/** -text
