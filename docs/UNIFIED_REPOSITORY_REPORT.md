@@ -105,9 +105,8 @@ dosyalarla baytı baytına aynı. Kök `.gitattributes` bu dizini `-text -whites
 | `477dc0f` | Merge HGS2 application history into projects/hgs2 |
 | `2c8846e` | feat(hgs2): add perftest profile and startup safety guard |
 | `bf9718b` | docs: add lab artifacts (audit reports and approved evidence) |
-| (bu commit) | docs: add unified repository documentation and report |
-
-Gönderimden sonra raporun 8–10. bölümlerini dolduran bir belge commit'i daha eklenir.
+| `a536cea` | docs: add unified repository documentation and report |
+| (bu commit) | docs: record push result in unified repository report |
 
 ## 5. Test sonuçları
 
@@ -164,12 +163,29 @@ Gönderilecek 17 commit'in tamamı ve çalışma ağacı tarandı:
 
 ## 8. SSH bağlantı durumu
 
-_Gönderim sonrasında doldurulacak._
+* `origin` zaten SSH biçimindeydi: `git@github.com:zekeriyakalkann/hgs-performance-lab.git` (değiştirilmedi).
+* `~/.ssh/config`: `github.com` → `ssh.github.com:443`, `IdentityFile ~/.ssh/id_ed25519`, `IdentitiesOnly yes`.
+* Anahtar (`ED25519`, `SHA256:RZ62eTh7dFbv/b4n3oBTw54gwey1kdRy2sGBl2kHaNY`) parola korumalı, ssh-agent çalışmıyor.
+  Etkileşimsiz deneme (`ssh -o BatchMode=yes -T git@github.com`) beklendiği gibi `Permission denied (publickey)`
+  verdi; bu yüzden `ssh -T` ve `git push` kullanıcı tarafından kendi terminalinde, parolası elle girilerek çalıştırıldı.
+  Parola hiçbir dosyaya veya komut satırına yazılmadı.
 
 ## 9. Push sonucu
 
-_Gönderim sonrasında doldurulacak._
+* Gönderim öncesi uzak durum (HTTPS, salt okunur `git ls-remote`): `refs/heads/main` = `66518c6`, yerel
+  `origin/main` ile aynı; `origin/main`, `HEAD`'in atası → hızlı ileri sarma.
+* Komut: `git push -u origin main` (normal push; force / `--force-with-lease` kullanılmadı). Yalnızca `main` gönderildi;
+  yerel `backup/pre-unify-66518c6` dalı gönderilmedi.
+* Sonuç: `66518c6..a536cea  main -> main` (10 yeni commit), `main` → `origin/main` izleme ayarlandı.
+* GitHub üzerinden doğrulama: maskelenmiş `application.properties` (`${HGS_DB_PASSWORD}`) ve ESP32 sketch'i
+  (`YOUR_WIFI_SSID` / `YOUR_WIFI_PASSWORD` / `YOUR_SERVER_IP`) yayımlanan sürümde görüldü; lab-artifacts raporları erişilebilir.
 
 ## 10. GitHub üzerinde doğrulanan son commit
 
-_Gönderim sonrasında doldurulacak._
+| Öğe | Değer |
+|---|---|
+| Depo | `github.com/zekeriyakalkann/hgs-performance-lab`, dal `main` |
+| Commit | `a536cead398dead4a2be528ff71157645e063c56` — docs: add unified repository documentation and report |
+| Doğrulama | `git ls-remote https://github.com/zekeriyakalkann/hgs-performance-lab.git` → `refs/heads/main` = yerel `HEAD`; GitHub API commit tarihi 2026-10-31T12:44:15Z |
+
+Bu raporu güncelleyen commit, yukarıdaki commit'in üzerine ikinci bir normal push ile gönderilir.
