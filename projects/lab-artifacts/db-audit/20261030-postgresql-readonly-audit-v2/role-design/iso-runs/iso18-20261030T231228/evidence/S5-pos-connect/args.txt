@@ -1,0 +1,1 @@
+﻿-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=hgs2_perftest_db user=hgs2_audit sslmode=require" -w -At -c "select current_user, session_user, current_database(), (select ssl from pg_stat_ssl where pid = pg_backend_pid())"

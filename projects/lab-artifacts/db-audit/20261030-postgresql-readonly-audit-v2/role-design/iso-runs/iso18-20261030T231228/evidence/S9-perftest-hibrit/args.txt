@@ -1,0 +1,1 @@
+﻿-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=hibrit_giris_db user=hgs2_perftest sslmode=require" -w -c "select 1"

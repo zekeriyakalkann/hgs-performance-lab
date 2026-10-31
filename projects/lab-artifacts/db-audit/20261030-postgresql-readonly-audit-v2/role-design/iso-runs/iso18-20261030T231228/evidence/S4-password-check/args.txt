@@ -1,0 +1,1 @@
+﻿-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=postgres user=postgres sslmode=require" -w -At -c "select rolname, left(rolpassword, 14) from pg_authid where rolname in ('hgs2_audit','hgs2_perftest') order by 1"

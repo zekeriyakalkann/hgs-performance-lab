@@ -1,0 +1,19 @@
+{
+  "label": "step6-full-integration-round1",
+  "exit_code": 0,
+  "started_utc": "2026-10-29T15:45:37.145521+00:00",
+  "finished_utc": "2026-10-29T15:46:20.566186+00:00",
+  "duration_s": 43.4,
+  "git_head": "1fe78f482c8f430b125db853c73b1423d80f593a",
+  "tree_files": 148,
+  "tree_manifest_sha256": "894c216f2be8eaf742fef07f3eb320adc1c88221f70f3d9a80eef5042b1b02e6",
+  "junit": {
+    "tests": 103,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 103,
+    "failed_or_error_cases": []
+  },
+  "console_summary_line": "103 passed, 1519 deselected in 41.61s"
+}

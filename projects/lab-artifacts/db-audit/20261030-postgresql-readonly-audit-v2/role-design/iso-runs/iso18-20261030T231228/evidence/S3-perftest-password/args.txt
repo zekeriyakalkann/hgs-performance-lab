@@ -1,0 +1,1 @@
+﻿-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=postgres user=postgres sslmode=require" -w -v target_role=hgs2_perftest -f "C:\Users\Ceng Zeki\AppData\Local\hgs2-iso\iso18-20261030T231228\evidence\00-inputs\set_password_v1.sql"

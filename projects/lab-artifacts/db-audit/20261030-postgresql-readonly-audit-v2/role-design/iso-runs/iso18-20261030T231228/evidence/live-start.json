@@ -1,0 +1,6 @@
+{
+    "State":  "Running",
+    "Pid":  4708,
+    "Created":  "2026-10-30T16:29:54.8155590+03:00",
+    "PathName":  "\"C:\\Program Files\\PostgreSQL\\18\\bin\\pg_ctl.exe\" runservice -N \"postgresql-x64-18\" -D \"C:\\Program Files\\PostgreSQL\\18\\data\" -w"
+}

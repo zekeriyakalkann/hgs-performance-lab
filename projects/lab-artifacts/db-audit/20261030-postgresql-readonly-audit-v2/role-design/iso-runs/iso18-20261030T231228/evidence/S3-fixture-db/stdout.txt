@@ -1,0 +1,18 @@
+SET
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+RESET
+ relname |     owner     | relacl 
+---------+---------------+--------
+ admins  | hgs2_perftest | 
+ devices | hgs2_perftest | 
+ logs    | hgs2_perftest | 
+ users   | hgs2_perftest | 
+(4 satýr)
+

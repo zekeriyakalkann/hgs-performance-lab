@@ -1,0 +1,50 @@
+ M README.md
+ M configs/config.example.json
+ M src/hgs2_lab/cli.py
+ M src/hgs2_lab/config.py
+ M src/hgs2_lab/execution.py
+ M src/hgs2_lab/http_transport.py
+ M src/hgs2_lab/metadata.py
+ M src/hgs2_lab/runner.py
+ M src/hgs2_lab/sanitize.py
+ M src/hgs2_lab/target_guard.py
+ M src/hgs2_lab/transport.py
+ M tests/local_http_server.py
+ M tests/test_golden.py
+ M tests/test_metadata.py
+ M tests/test_sanitize.py
+?? src/hgs2_lab/classify.py
+?? src/hgs2_lab/expectations.py
+?? src/hgs2_lab/ingestion.py
+?? src/hgs2_lab/junit_analysis.py
+?? src/hgs2_lab/junit_report.py
+?? src/hgs2_lab/port_owner.py
+?? src/hgs2_lab/readiness.py
+?? src/hgs2_lab/records.py
+?? src/hgs2_lab/response_parser.py
+?? src/hgs2_lab/result_analysis.py
+?? src/hgs2_lab/scenario_mapping.py
+?? src/hgs2_lab/target_process.py
+?? tests/conftest.py
+?? tests/fixtures/
+?? tests/isolation_guard.py
+?? tests/test_business_outcome.py
+?? tests/test_business_outcome_local.py
+?? tests/test_classify.py
+?? tests/test_expectations.py
+?? tests/test_expectations_pipeline.py
+?? tests/test_hgs2_contract.py
+?? tests/test_hgs2_contract_local.py
+?? tests/test_ingestion.py
+?? tests/test_isolation_guard.py
+?? tests/test_junit_analysis.py
+?? tests/test_junit_pipeline.py
+?? tests/test_junit_report.py
+?? tests/test_readiness.py
+?? tests/test_records.py
+?? tests/test_response_parser.py
+?? tests/test_result_analysis.py
+?? tests/test_scenario_mapping.py
+?? tests/test_scenario_mapping_pipeline.py
+?? tests/test_target_identity.py
+?? tests/test_target_identity_local.py

@@ -1,0 +1,2 @@
+ERROR:  42501: permission denied for table users
+YER:  aclcheck_error, aclchk.c:2795

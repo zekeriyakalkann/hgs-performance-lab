@@ -1,0 +1,3 @@
+pgsql/share/locale/pt_BR/LC_MESSAGES/pg_archivecleanup-16.mo
+pgsql/share/locale/zh_CN/LC_MESSAGES/pg_archivecleanup-16.mo
+pgsql/share/locale/zh_TW/LC_MESSAGES/pg_archivecleanup-16.mo

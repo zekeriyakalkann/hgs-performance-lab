@@ -1,0 +1,2 @@
+pgsql/share/extension/pg_stat_statements--unpackaged--1.0.sql
+pgsql/share/locale/zh_CN/LC_MESSAGES/pg_archivecleanup-12.mo

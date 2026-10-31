@@ -1,0 +1,14 @@
+# --- HGS2 isolated test cluster (iso18-20261030T223605) - gecici, izole ---
+port = 55438
+listen_addresses = '127.0.0.1,::1'
+unix_socket_directories = ''
+cluster_name = 'hgs2iso18'
+max_connections = 20
+password_encryption = 'scram-sha-256'
+ssl = on
+ssl_cert_file = 'C:/Users/Ceng Zeki/AppData/Local/hgs2-iso/iso18-20261030T223605/certs/server.crt'
+ssl_key_file = 'C:/Users/Ceng Zeki/AppData/Local/hgs2-iso/iso18-20261030T223605/certs/server.key'
+log_connections = on
+log_disconnections = on
+log_statement = 'all'
+log_line_prefix = '%m [%p] %e user=%u db=%d host=%h app=%a '

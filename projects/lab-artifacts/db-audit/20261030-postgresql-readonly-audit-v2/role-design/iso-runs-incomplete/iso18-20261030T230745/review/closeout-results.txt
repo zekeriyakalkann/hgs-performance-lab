@@ -1,0 +1,27 @@
+old_root = C:\Users\Ceng Zeki\AppData\Local\hgs2-iso\iso18-20261030T230745
+live_now = State=Running Pid=4708 Created=2026-10-30T16:29:54.8155590+03:00
+live_old_start = State=Running Pid=4708 Created=2026-10-30T16:29:54.8155590+03:00
+live_pathname_same = True
+live5432_now = ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+live5432_old_start = ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+live_same_as_old_run_start = True
+pg_ctl_status_rc = 3
+postmaster_pid_file_exists = False
+test_postmaster_process_count = 0
+port55438_listening = False
+log_file_count = 1
+pgpass_entry_roles = postgres
+secret_scan_pgpass_derived_hits = 0
+key_scan_exempt_files = runner_v1_single_session.ps1 sha256=3d214f5645820e1375ed027b3d302b0a80465bab28f618ae88e173a626ec824a
+secret_scan_pem_begin_hits_all_files = 0
+secret_scan_private_key_hits = 0
+secret_scan_pgpass_format_hits = 0
+archive_evidence_files = 9
+extra_files_archived = runner-console.log,runner-transcript.txt
+certs_cfg_archived = HAYIR (ozel anahtar ve pgpass arsive kopyalanmadi)
+gates_10_4 = PASS (7 kapi + postmaster.pid + RunId onayi)
+old_root_removed = True
+old_root_exists_after = False
+live_end = State=Running Pid=4708 Created=2026-10-30T16:29:54.8155590+03:00
+live5432_end = ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+live_unchanged_during_closeout = True

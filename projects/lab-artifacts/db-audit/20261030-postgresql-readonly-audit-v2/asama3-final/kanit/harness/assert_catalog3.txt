@@ -1,0 +1,33 @@
+PUBLIC CONNECT (3.4)|^ hgs2_perftest_db \| t +\| t +\| t$
+hibrit PUBLIC yok (3.4)|^ hibrit_giris_db +\| f +\| f +\| f$
+perftest hibrit CONNECT yok (3.2)|^ hibrit_giris_db +\| f +\| f +\| f$
+dogrudan uyelik grp_nested (2.3)|^ grp_nested +\| f +\| f +\|
+dolayli uyelik grp_reader (2.4)|^ grp_reader +\| f +\| t$
+sutun ACL id (5.4c)|^ admins +\| id +\| hgs2_perftest \| pgadmin +\| SELECT$
+sutun ACL kullanici_adi (5.4c)|^ admins +\| kullanici_adi \| hgs2_perftest \| pgadmin +\| SELECT$
+default privileges (5.4d)|^ pgadmin +\| public +\| r +\| hgs2_perftest \| SELECT +\| f$
+identity seq yetkisi (5.5b)|^ public +\| users_id_seq +\| pgadmin +\| f +\| t +\| t +\| f +\| f +\| f$
+serial seq yetkisi (5.5b)|^ public +\| extra_serial_id_seq \| pgadmin +\| f +\| f +\| t +\| f +\| f +\| f$
+beklenmeyen identity seq (5.9)|^ public +\| extra_ident_id_seq +\| S .*beklenmeyen tabloya bagli identity sequence$
+serial sequence (5.9)|^ public +| extra_serial_id_seq +| S .*serial / OWNED BY sequence$
+extension nesnesi (5.9)|^ public +\| pg_stat_statements +\| v .*extension nesnesi$
+beklenmeyen tablo (5.9)|^ public +\| extra_ident +\| r .*beklenmeyen nesne$
+extension (5.14)|^ pg_stat_statements +| [0-9]
+buyuk nesne metadata (5.16)|^ pgadmin +\| +1 \| +0$
+identity ozet beklenen 4 (5.17)|^ identity sequence \(beklenen 4 tabloya bagli\) +\| +4 \| +4$
+identity ozet tum 5 (5.17)|^ identity sequence \(tum kullanici .*\| +4 \| +5$
+parmak_izi_sablonu oid (5.8)|^ parmak_izi_sablonu \| oid +\| f$
+dogrudan tablo yetkisi users SELECT + kaynak (5.4a U7)|^ users +\| SELECT +\| t +\| t +\| f +\| t +\| f +\| dogrudan ACL$
+dogrudan tablo yetkisi users INSERT + kaynak (5.4a U7)|^ users +\| INSERT +\| t +\| t +\| f +\| t +\| f +\| dogrudan ACL$
+uyelik yoluyla logs SELECT + kaynak dolayli (5.4a U7)|^ logs +\| SELECT +\| t +\| t +\| f +\| f +\| f +\| dolayli \(rol uyeligi\)$
+sutun yetkisi tablo f / sutun t / kaynak - (5.4a)|^ admins +\| SELECT +\| f +\| t +\| f +\| f +\| f +\| -$
+ALTER ROLE ALL SET maskeli + gizli ad sinifi (4)|^ 4 ALTER ROLE ALL .*\| hgs2.test_secret +\| <maskelendi> +\| f +\| t$
+rol search_path guvenlik (4)|^ 2 rol .*\| hgs2_perftest \|.*\| search_path +\| public, pg_catalog \| t +\| f$
+rol+db statement_timeout (4)|^ 1 rol\+veritabani .*\| statement_timeout \| 15s +\| f +\| f$
+db ayari maskeli (4)|^ 3 veritabani .*\| work_mem +\| <maskelendi> +\| f +\| f$
+perftest gizli GUC maskeli (4)|^ 2 rol .*\| hgs2_perftest \|.*\| hgs2.db_password +\| <maskelendi> +\| f +\| t$
+denetim rolu kalici ayari gorunur ve maskeli (4 U6)|^ 2 rol .*\| hgs2_auditor +\|.*\| hgs2.audit_token +\| <maskelendi> +\| f +\| t$
+RLS politikasi users_self (5.15)|^ public +\| users +\| t +\| f +\| users_self +\| r +\| t +\| hgs2_perftest \| \(\(ogrenci_no\)::text = CURRENT_USER\)
+RLS literal maskeli (5.15 U9)|^ public +\| logs +\| f +\| f +\| logs_secret +\| \* +\| t +\| PUBLIC +\| \(\(device_id\)::text <> '<maskelendi>'::text\)
+proconfig maskeli, search_path izinli (5.11 U9)|^ public +\| fn_with_secret .*\| hgs2.api_token=<maskelendi>, search_path=pg_catalog \| f +\|
+foreign server degerler gizli, adlar ve hibrit bayragi (5.14b U9)|^ prod_link +\| postgres_fdw \| pgadmin \| host, port, dbname \| t +\| +1$

@@ -1,0 +1,2 @@
+ERROR:  42501: permission denied to set role "hgs2_perftest"
+YER:  call_string_check_hook, guc.c:6945

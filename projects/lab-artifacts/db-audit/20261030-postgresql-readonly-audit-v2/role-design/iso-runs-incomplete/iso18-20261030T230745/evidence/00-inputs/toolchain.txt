@@ -1,0 +1,13 @@
+PSVersion: 5.1.26100.9711
+Host: ConsoleHost
+Kullanici: DESKTOP-N286CHO\Ceng Zeki
+postgres.exe: postgres (PostgreSQL) 18.6
+psql.exe: psql (PostgreSQL) 18.6
+initdb.exe: initdb (PostgreSQL) 18.6
+pg_ctl.exe: pg_ctl (PostgreSQL) 18.6
+pg_controldata.exe: pg_controldata (PostgreSQL) 18.6
+py -3.13: Python 3.13.16
+openssl: OpenSSL 3.5.8 25 Aug 2026 (Library: OpenSSL 3.5.8 25 Aug 2026)
+excludedportrange ipv4/ipv6: 55438 kapsanmiyor
+runbook sha256: de943cc52a9d79aa7138a22946d2eed0cd15820d987551ea2caa81e6a5ccc081
+validator sha256: a99fcb8fefff9d4cdd560639a9ef50e8ae65ee5c429578f636912f8557c50a57

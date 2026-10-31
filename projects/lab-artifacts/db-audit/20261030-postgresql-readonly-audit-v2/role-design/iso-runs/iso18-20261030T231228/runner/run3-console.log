@@ -1,0 +1,365 @@
+===== S0 =====
+5.1.26100.9711
+ConsoleHost
+
+Value                                                            Name                                                  
+-----                                                            ----                                                  
+5916d12bb1194b6978cbe480b60a2d2311dee6afe3e3da3dabf93bb7a96aa40b C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifa...
+398889d315187e965bb555f2fa72ba92f7bfcb341d5cca50dfdaa96a822cf389 C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifa...
+5733d45fa265309089a417c2e2653d2564f63783df854b78316447c11694bd7b C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifa...
+
+
+postgres (PostgreSQL) 18.6
+psql (PostgreSQL) 18.6
+Python 3.13.16
+OpenSSL 3.5.8 25 Aug 2026 (Library: OpenSSL 3.5.8 25 Aug 2026)
+
+Protocol tcp Port Exclusion Ranges
+
+Start Port    End Port      
+----------    --------      
+     13508       13508      
+     50000       50059     *
+     53095       53194      
+     53195       53294      
+     53395       53494      
+     53495       53594      
+     53695       53794      
+     60389       60488      
+
+* - Administered port exclusions.
+
+
+Protocol tcp Port Exclusion Ranges
+
+Start Port    End Port      
+----------    --------      
+     13508       13508      
+     50000       50059     *
+     53095       53194      
+     53195       53294      
+     53395       53494      
+     53495       53594      
+     53695       53794      
+     60389       60488      
+
+* - Administered port exclusions.
+
+True
+False
+PSVersion: 5.1.26100.9711
+Host: ConsoleHost
+Kullanici: DESKTOP-N286CHO\Ceng Zeki
+postgres.exe: postgres (PostgreSQL) 18.6
+psql.exe: psql (PostgreSQL) 18.6
+initdb.exe: initdb (PostgreSQL) 18.6
+pg_ctl.exe: pg_ctl (PostgreSQL) 18.6
+pg_controldata.exe: pg_controldata (PostgreSQL) 18.6
+py -3.13: Python 3.13.16
+openssl: OpenSSL 3.5.8 25 Aug 2026 (Library: OpenSSL 3.5.8 25 Aug 2026)
+excludedportrange ipv4/ipv6: 55438 kapsanmiyor
+runbook sha256: de943cc52a9d79aa7138a22946d2eed0cd15820d987551ea2caa81e6a5ccc081
+validator sha256: a99fcb8fefff9d4cdd560639a9ef50e8ae65ee5c429578f636912f8557c50a57
+S0 kapilari: PASS
+===== S1 =====
+
+
+State    : Running
+Pid      : 4708
+Created  : 2026-10-30T16:29:54.8155590+03:00
+PathName : "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" runservice -N "postgresql-x64-18" -D "C:\Program Files\Postg
+           reSQL\18\data" -w
+
+
+
+5432 dinleyicileri: ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+RunId: iso18-20261030T231228
+Test koku: C:\Users\Ceng Zeki\AppData\Local\hgs2-iso\iso18-20261030T231228
+2026-10-30T23:12:29.9950940+03:00 after-S1 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.1 =====
+
+Name    
+----    
+certs   
+cfg     
+evidence
+log     
+
+
+2026-10-30T23:12:30.6107655+03:00 after-S2.1 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.2 =====
+Bu veritaban˝ sistemine ait olan dosyalar˝n sahibi "Ceng Zeki" kullan˝c˝s˝ olacakt˝r.
+Bu kullan˝c˝ ayn˝ zamanda sunucu s¸recinin de sahibi olmal˝d˝r.
+
+Veritaban˝ k¸mesi "C" yerel ayarlar˝ ile olu˛turulacak.
+÷ntan˝ml˝ metin arama yap˝land˝rmas˝ "english" olarak ayarlanacak.
+
+Veri sayfas˝ (data page) dorulama etkinle˛tirilmi˛tir.
+
+C:/Users/Ceng Zeki/AppData/Local/hgs2-iso/iso18-20261030T231228/data dizini yarat˝l˝yor ... tamam
+alt dizinler olu˛turuluyor ... tamam
+dinamik payla˛˝lan bellek (shared memory) uygulamas˝ seÁimi ... windows
+selecting default "max_connections" ... 100
+selecting default "shared_buffers" ... 128MB
+selecting default time zone ... Europe/Istanbul
+yap˝land˝rma dosyalar˝ yarat˝l˝yor ... tamam
+ˆny¸kleme komut dosyas˝ Áal˝˛t˝r˝l˝yor ...tamam
+ˆny¸kleme sonras˝ ba˛latmay˝ gerÁekle˛tirme ...tamam
+veriyi diske senkronize etme ...tamam
+
+›˛lem ba˛ar˝l˝. Veritaban˝ sunucusunu a˛a˝daki gibi ba˛latabilirsiniz:
+
+   ^"C^:^\Program^ Files^\PostgreSQL^\18^\bin^\pg^_ctl^" -D ^"C^:^\Users^\Ceng^ Zeki^\AppData^\Local^\hgs2^-iso^\iso18^-20261030T231228^\data^" -l logfile start
+
+
+SysId: 7702556342130788452
+2026-10-30T23:12:38.0922094+03:00 after-S2.2 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.3 =====
+........+..........+...+............+......++++++++++++++++++++++++++++++++++++++++++*...............++++++++++++++++++++++++++++++++++++++++++*..+....+.........+.........+.................+....+..+....+.............................+....+...+..+................+............+...+..+...+....+...................................+..........+...........+....+.................+.........+.+..............+..........+..............+.......+........+...+....+...+....................+.+......+...+.....+.+.....+.......+........+.+........+............+..........+...........+.........+....+..+.........+....+.................+............+..........+......+.....+......+....+.........+.....+++++
+..+....++++++++++++++++++++++++++++++++++++++++++*...+.+...+..............+...++++++++++++++++++++++++++++++++++++++++++*....+.............+...........+......+...+............+....+......+...+........+...+.+.........+.................+.......+...+.....+...+...............+................+.....+.............+.....+......+.......+..+.+............+.........+...........+.......+..+.+.....+.......+.................+.........+.......+.............................+.........+....+...+........+............+...+......+....+..............................+......+...+............+........+...+.......+............+.....+.+.....+.............+......+........+.......+..................+..+...+...............+......+......+...+................+...............+..+..................+.......+..............+...+.............+.....+.........+.........+.+...+......+..+.........+...+............+...+..........+.....+.+.....+.......+..+.+......+........+...+.......+..+.....................+..........+.........+........+.+..+....+...+......+.....+......................+.................................+..+...+.......+...+..............+......+....+......+.........+..+.+..+............+.+.........+........+...+..........+...+.....+....+............+...+........+...+.......+........+...............+...........................+.........+.........+....+........+.......+............+...+........+...+.+......+........+..........+......+..................+.................+.+...+......+.....+..........+.........+..........................+.+...+......+..............+....+...........+....+...............+........+.......+......+..+...+....+......+................................+.........+.+..................+..+.............+..+...+........................+.+.....+.+...........+...+......+......+....+...+......+.........+..+..........+.....+................+..+................+......+........+.+..+..........+........+............+.............+......+.........+......+...+...............+..+.+...+.....+......+..........+.....+.+++++
+-----
+.+...+.+.........+...+..+...+...+.+...............++++++++++++++++++++++++++++++++++++++++++*.+....+..+...++++++++++++++++++++++++++++++++++++++++++*...+........+...+..........+......+...+.....+......+.+.....+...+......+.+...........+....+...+..................+.....+....+.....+......+.......+...........+..........+.....+...............+............+....+...........+............+...............+......+.........+..........+..+...+......+.........+............................+.....+..........+...+..+.........+...+.............+................................+...+.......+.....+...+...+.+.........+..............+................+.....+.+....................+....+......+......+........+......+................+...+...........+....+......+.....+...................+..+.........+.........+......+.........+.+...+...........+....+..+.+...+..+.......+..+........................+.......+..+..........+...+..+.+.....+......+....+......+...+..+.+.........+...+........+.......+..+...+..........+..+..........+........+............+.+.........+.....+....+..........................+....+...........+..................+.+......+...+......+..+...+.+........................+++++
+.....+.+.....+...............+...+....+.....+.+..+....+...........+....+...+......+..+....++++++++++++++++++++++++++++++++++++++++++*....++++++++++++++++++++++++++++++++++++++++++*....+......+....+.....+......+...+.+.........+...............+...+.....+...+................+...+..+.........+.+........+.+...........+...+............+.+..............+.+..+.......+......+............+.....+.+..+.......+....................+..........+.................+.+..+...+...+....+........+....+...+..+.........+....+..+....+.........+..+...+......+.+......+............+.....+...............+...........................+.............+...+..............+.....................+.........+.+..............+..........+.....+...................+...........+.+..+..........+.....+.+..+...................+......+........+............+....+++++
+-----
+Certificate request self-signature ok
+subject=CN=hgs2-test.local
+
+Name           Length
+----           ------
+ca.crt           1526
+ca.key           2524
+ca.srl             42
+server.crt       1616
+server.csr       1266
+server.key       2524
+server_ext.cnf    155
+
+
+2026-10-30T23:12:39.5257981+03:00 after-S2.3 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.4 =====
+2026-10-30T23:12:39.9558987+03:00 after-S2.4 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.5 =====
+sunucunun ba˛lamas˝ bekleniyor.... tamam
+sunucu ba˛lat˝ld˝
+PostgreSQL 18.6 on x86_64-windows, compiled by msvc-19.44.35229, 64-bit|55438|hgs2iso18|on|C:/Users/Ceng Zeki/AppData/Local/hgs2-iso/iso18-20261030T231228/data
+
+-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=postgres user=postgres sslmode=require" -w -At -c "select version(), current_setting('port'), current_setting('cluster_name'), current_setting('ssl'), current_setting('data_directory')"
+
+LocalAddress LocalPort OwningProcess
+------------ --------- -------------
+::1              55438          1296
+127.0.0.1        55438          1296
+
+
+2026-10-30 23:12:40.370 +03 [1296] 00000 user= db= host= app= LOG:  starting PostgreSQL 18.6 on x86_64-windows, compiled by msvc-19.44.35229, 64-bit
+2026-10-30 23:12:40.371 +03 [1296] 00000 user= db= host= app= LOG:  listening on IPv4 address "127.0.0.1", port 55438
+2026-10-30 23:12:40.373 +03 [1296] 00000 user= db= host= app= LOG:  listening on IPv6 address "::1", port 55438
+2026-10-30 23:12:40.441 +03 [4452] 00000 user= db= host= app= LOG:  database system was shut down at 2026-10-30 23:12:33 +03
+2026-10-30 23:12:40.459 +03 [1296] 00000 user= db= host= app= LOG:  database system is ready to accept connections
+2026-10-30 23:12:41.047 +03 [7720] 00000 user=[unknown] db=[unknown] host=127.0.0.1 app=[unknown] LOG:  connection received: host=127.0.0.1 port=53003
+2026-10-30 23:12:41.100 +03 [7720] 00000 user=postgres db=postgres host=127.0.0.1 app=[unknown] LOG:  connection authenticated: identity="postgres" method=scram-sha-256 (C:/Users/Ceng Zeki/AppData/Local/hgs2-iso/iso18-20261030T231228/data/pg_hba.conf:8)
+2026-10-30 23:12:41.100 +03 [7720] 00000 user=postgres db=postgres host=127.0.0.1 app=[unknown] LOG:  connection authorized: user=postgres database=postgres application_name=psql SSL enabled (protocol=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384, bits=256)
+2026-10-30 23:12:41.112 +03 [7720] 00000 user=postgres db=postgres host=127.0.0.1 app=psql LOG:  statement: select version(), current_setting('port'), current_setting('cluster_name'), current_setting('ssl'), current_setting('data_directory')
+2026-10-30 23:12:41.116 +03 [7720] 00000 user=postgres db=postgres host=127.0.0.1 app=psql LOG:  disconnection: session time: 0:00:00.078 user=postgres database=postgres host=127.0.0.1 port=53003
+2026-10-30T23:12:43.2574017+03:00 after-S2.5 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S3 =====
+CREATE ROLE
+CREATE DATABASE
+CREATE DATABASE
+CREATE DATABASE
+REVOKE
+     datname      |     owner     |               datacl                
+------------------+---------------+-------------------------------------
+ hgs2_perftest_db | hgs2_perftest | 
+ hibrit_giris_db  | postgres      | {=T/postgres,postgres=CTc/postgres}
+ other_db         | postgres      | 
+ postgres         | postgres      | 
+ template0        | postgres      | {=c/postgres,postgres=CTc/postgres}
+ template1        | postgres      | {=c/postgres,postgres=CTc/postgres}
+(6 satçr)
+
+
+SET
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+RESET
+ relname |     owner     | relacl 
+---------+---------------+--------
+ admins  | hgs2_perftest | 
+ devices | hgs2_perftest | 
+ logs    | hgs2_perftest | 
+ users   | hgs2_perftest | 
+(4 satçr)
+
+
+2026-10-30T23:12:47.8033793+03:00 after-S3 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S4 =====
+Onayli kopya SHA-256: b1053606b9e0cc4a48d0e122ff4a26a28b1dc0a06070a6a75f4c23f48697bf07
+BEGIN
+SET
+SET
+SET
+CREATE ROLE
+BILGI: hgs2_perftest_db CONNECT PUBLIC uzerinden mevcut; GRANT uretilmedi.
+BILGI: public USAGE PUBLIC uzerinden mevcut; GRANT uretilmedi.
+eksik katalog SELECT: -
+pg_control_system proacl: NULL (stok: PUBLIC EXECUTE)
+BILGI: pg_control_system EXECUTE PUBLIC uzerinden mevcut; GRANT uretilmedi.
+eksik/cozulemeyen fonksiyon EXECUTE: -
+attrs_ok= t  no_db_create= t  has_db_temporary= t  no_schema_create= t
+user_rel_access_count= 0  lo_compat_off= t  lo_public_or_audit_count= 0
+defacl_risk_count= 0  secdef_callable_count= 0  role_setting_count= 0  parameter_acl_count= 0
+ db | catalog | object 
+----+---------+--------
+(0 satçr)
+
+     datname      | datallowconn | acl_connect | expected_connect 
+------------------+--------------+-------------+------------------
+ hgs2_perftest_db | t            | t           | t
+ hibrit_giris_db  | t            | f           | f
+ other_db         | t            | t           | f
+ postgres         | t            | t           | f
+ template0        | f            | t           | f
+ template1        | t            | t           | f
+(6 satçr)
+
+     datname      | first_tcp_rule_method 
+------------------+-----------------------
+ hgs2_perftest_db | scram-sha-256
+ hibrit_giris_db  | reject
+ other_db         | reject
+ postgres         | reject
+ template0        | reject
+ template1        | reject
+(6 satçr)
+
+HGS2_ROLE_DESIGN_OK: dogrulamalar gecti; COMMIT
+KAYIT: has_db_temporary= t  secdef_callable_count= 0  hibrit_acl_closed= t
+COMMIT
+hgs2_audit|SCRAM-SHA-256$
+hgs2_perftest|SCRAM-SHA-256$
+
+2026-10-30T23:12:52.5366726+03:00 after-S4 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S5 =====
+BEGIN
+SET
+     datname      | datallowconn | acl_connect | expected_connect 
+------------------+--------------+-------------+------------------
+ hgs2_perftest_db | t            | t           | t
+ hibrit_giris_db  | t            | f           | f
+ other_db         | t            | t           | f
+ postgres         | t            | t           | f
+ template0        | f            | t           | f
+ template1        | t            | t           | f
+(6 satçr)
+
+A not_superuser= t  attrs_ok= t
+B no_member_of= t  no_members_in_audit= t  no_effective_membership= t  not_member_perftest= t  not_member_postgres= t
+C no_owned_db= t  no_owned_schema_this_db= t  no_owner_shdep_records= t  no_other_shdeps= t  no_owned_tablespace= t
+D user_rel_access_count= 0  no_select_users= t  lo_public_or_audit_count= 0  defacl_risk_count= 0
+E no_db_create_any= t  no_schema_create= t  has_db_temporary(kayit)= t
+F connect_target= t  hibrit_acl_closed= t  usage_pg_catalog= t  usage_public= t  ctrl_exec= t
+F acl_ref_count= 0  role_setting_count= 0  parameter_acl_count= 0  lo_compat_off= t  secdef_callable_count(kayit)= 0
+F catalogs_ok= t  eksik: -
+F functions_ok= t  eksik: -
+G hba_no_errors= t  hba_hibrit_rejected= t
+HGS2_V1_ROLE_VERIFY_OK
+ROLLBACK
+
+hgs2_audit|hgs2_audit|hgs2_perftest_db|t
+
+S5-neg-set-role: cikis=1  ERROR:  42501: permission denied to set role "hgs2_perftest"
+S5-neg-select-users: cikis=1  ERROR:  42501: permission denied for table users
+S5-neg-create-table: cikis=1  ERROR:  42501: permission denied for schema public
+2026-10-30T23:13:00.0232828+03:00 after-S5 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S6 =====
+Final SQL SHA-256: 5916d12bb1194b6978cbe480b60a2d2311dee6afe3e3da3dabf93bb7a96aa40b
+psql cikis: 0
+-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=hgs2_perftest_db user=hgs2_audit sslmode=require" -v expected_host=127.0.0.1 -v expected_port=55438 -v expected_server_addr=127.0.0.1 -v expected_server_port=55438 -v expected_system_identifier=7702556342130788452 -f "C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\db-audit\20261030-postgresql-readonly-audit-v2\asama3-final\postgresql_readonly_audit_v2.sql" -w
+tasima= tcp-loopback  istemci_host_sinifi= loopback  tls= t  tls_surum= TLSv1.3  sifre= TLS_AES_256_GCM_SHA384  bit= 256
+HGS2_AUDIT_PREFLIGHT_OK
+HGS2_AUDIT_COMPLETE
+2026-10-30T23:13:02.1534794+03:00 after-S6 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S7 =====
+PASS
+validator cikis: 0
+PASS
+2026-10-30T23:13:02.7974784+03:00 after-S7 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S8 =====
+S8-audit-hibrit-disable: cikis=2
+psql: hata (error): connection to server at "127.0.0.1", port 55438 failed: FATAL:  pg_hba.conf rejects connection for host "127.0.0.1", user "hgs2_audit", database "hibrit_giris_db", no encryption
+
+S8-audit-hibrit-require: cikis=2
+psql: hata (error): connection to server at "127.0.0.1", port 55438 failed: FATAL:  pg_hba.conf rejects connection for host "127.0.0.1", user "hgs2_audit", database "hibrit_giris_db", SSL encryption
+
+28000 satirlari: 2   oturum acilis satirlari: 0
+2026-10-30T23:13:05.9773177+03:00 after-S8 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S9 =====
+hgs2_perftest|hgs2_perftest_db
+
+S9-perftest-hibrit: cikis=2
+psql: hata (error): connection to server at "127.0.0.1", port 55438 failed: FATAL:  permission denied for database "hibrit_giris_db"
+AYRINTI:  User does not have CONNECT privilege.
+
+42501 satirlari: 1   28000/28P01 satirlari: 0
+2026-10-30T23:13:09.2430677+03:00 after-S9 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S10.1 =====
+sunucunun kapanmas˝ bekleniyor....... tamam
+sunucu durduruldu
+===== S10.2 =====
+parola taramasi postgres: 0 eslesme
+parola taramasi hgs2_audit: 0 eslesme
+parola taramasi hgs2_perftest: 0 eslesme
+2026-10-30T23:13:14.2046081+03:00 after-S10.2 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S10.3 =====
+Arsiv: C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\db-audit\20261030-postgresql-readonly-audit-v2\role-design\iso-runs\iso18-20261030T231228  dosya: 90
+2026-10-30T23:13:15.8221269+03:00 after-S10.3 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S10.4 =====
+SILINECEK: C:\Users\Ceng Zeki\AppData\Local\hgs2-iso\iso18-20261030T231228
+ONAY BEKLENIYOR: silme icin RunId su dosyaya yazilmali: C:\Users\CENGZE~1\AppData\Local\Temp\claude\C--Users-Ceng-Zeki-Desktop-Projects-hgs2-lab-artifacts-db-audit-20261030-postgresql-readonly-audit-v2\8dd06e11-4ff9-4d5c-b292-d27d9506fa4c\scratchpad\confirm-delete-run3.txt (en fazla 30 dk)
+konsol/transcript parola taramasi postgres: 0 eslesme (run3-transcript.txt)
+konsol/transcript parola taramasi hgs2_audit: 0 eslesme (run3-transcript.txt)
+konsol/transcript parola taramasi hgs2_perftest: 0 eslesme (run3-transcript.txt)
+konsol/transcript parola taramasi postgres: 0 eslesme (run3-console.log)
+konsol/transcript parola taramasi hgs2_audit: 0 eslesme (run3-console.log)
+konsol/transcript parola taramasi hgs2_perftest: 0 eslesme (run3-console.log)
+2026-10-30T23:13:35.8569415+03:00 before-S11 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S11 =====
+RunId: iso18-20261030T231228
+Final SQL SHA-256 bitis: 5916d12bb1194b6978cbe480b60a2d2311dee6afe3e3da3dabf93bb7a96aa40b  beklenen: 5916d12bb1194b6978cbe480b60a2d2311dee6afe3e3da3dabf93bb7a96aa40b  sonuc: AYNI
+Plan/matris/SQL butunlugu degismedi: True
+Canli servis baslangic: State=Running Pid=4708 Created=2026-10-30T16:29:54.8155590+03:00
+Canli servis bitis    : State=Running Pid=4708 Created=2026-10-30T16:29:54.8155590+03:00
+Canli PathName ayni: True
+5432 dinleyicileri baslangic: ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+5432 dinleyicileri bitis    : ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+Canli servis degismedi: True
+Test koku mevcut degil: True
+Port 55438 bos: True
+--- Asama sonuclari ---
+2026-10-30T23:12:30.1955205+03:00 S1-live-snapshot RECORDED
+2026-10-30T23:12:37.6808255+03:00 S2.2-initdb PASS
+2026-10-30T23:12:39.0602536+03:00 S2.3-certs PASS
+2026-10-30T23:12:39.5461196+03:00 S2.4-conf PASS
+2026-10-30T23:12:42.5718098+03:00 S2-cluster PASS
+2026-10-30T23:12:47.3960976+03:00 S3-fixture PASS
+2026-10-30T23:12:52.1118132+03:00 S4-role-create PASS approved_sha256=b1053606b9e0cc4a48d0e122ff4a26a28b1dc0a06070a6a75f4c23f48697bf07
+2026-10-30T23:12:59.6072439+03:00 S5-role-verify PASS
+2026-10-30T23:13:01.7276166+03:00 S6-audit-run EXIT=0
+2026-10-30T23:13:02.3902078+03:00 S7-validator PASS
+2026-10-30T23:13:05.5775714+03:00 S8-audit-hibrit-blocked PASS
+2026-10-30T23:13:08.8215543+03:00 S9-perftest-42501 PASS
+2026-10-30T23:13:13.4304216+03:00 S10.1-cluster-stopped PASS
+2026-10-30T23:13:13.7689911+03:00 S10.2-secret-scan PASS
+2026-10-30T23:13:15.4170144+03:00 S10.3-archive PASS files=90
+2026-10-30T23:13:35.3846087+03:00 S10.4-root-removed PASS
+--- Nihai sonuc ---
+SONUC: V1 TAMAMLANDI
+SONUC: V1 TAMAMLANDI
+RUNNER_END

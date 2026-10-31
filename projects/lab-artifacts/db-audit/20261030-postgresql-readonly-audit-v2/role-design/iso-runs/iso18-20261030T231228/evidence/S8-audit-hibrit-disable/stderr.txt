@@ -1,0 +1,1 @@
+psql: hata (error): connection to server at "127.0.0.1", port 55438 failed: FATAL:  pg_hba.conf rejects connection for host "127.0.0.1", user "hgs2_audit", database "hibrit_giris_db", no encryption

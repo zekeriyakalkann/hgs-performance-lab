@@ -1,0 +1,1 @@
+﻿-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=hgs2_perftest_db user=hgs2_audit sslmode=require" -w -v VERBOSITY=verbose -c "CREATE TABLE public.v1_probe(i int)"

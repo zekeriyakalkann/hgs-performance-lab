@@ -1,0 +1,41 @@
+BEGIN
+SET
+SET
+SET
+CREATE ROLE
+BILGI: hgs2_perftest_db CONNECT PUBLIC uzerinden mevcut; GRANT uretilmedi.
+BILGI: public USAGE PUBLIC uzerinden mevcut; GRANT uretilmedi.
+eksik katalog SELECT: -
+pg_control_system proacl: NULL (stok: PUBLIC EXECUTE)
+BILGI: pg_control_system EXECUTE PUBLIC uzerinden mevcut; GRANT uretilmedi.
+eksik/cozulemeyen fonksiyon EXECUTE: -
+attrs_ok= t  no_db_create= t  has_db_temporary= t  no_schema_create= t
+user_rel_access_count= 0  lo_compat_off= t  lo_public_or_audit_count= 0
+defacl_risk_count= 0  secdef_callable_count= 0  role_setting_count= 0  parameter_acl_count= 0
+ db | catalog | object 
+----+---------+--------
+(0 satýr)
+
+     datname      | datallowconn | acl_connect | expected_connect 
+------------------+--------------+-------------+------------------
+ hgs2_perftest_db | t            | t           | t
+ hibrit_giris_db  | t            | f           | f
+ other_db         | t            | t           | f
+ postgres         | t            | t           | f
+ template0        | f            | t           | f
+ template1        | t            | t           | f
+(6 satýr)
+
+     datname      | first_tcp_rule_method 
+------------------+-----------------------
+ hgs2_perftest_db | scram-sha-256
+ hibrit_giris_db  | reject
+ other_db         | reject
+ postgres         | reject
+ template0        | reject
+ template1        | reject
+(6 satýr)
+
+HGS2_ROLE_DESIGN_OK: dogrulamalar gecti; COMMIT
+KAYIT: has_db_temporary= t  secdef_callable_count= 0  hibrit_acl_closed= t
+COMMIT

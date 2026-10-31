@@ -1,0 +1,12 @@
+Bu çalıştırma bir YENİDEN ÜRETME (repro) deneyidir, normal test sonucu değildir.
+
+Ortam: PYTHONPATH="C:/Users/Ceng Zeki/Desktop/Projects/hgs2-lab-artifacts/tools;C:/Users/Ceng Zeki/Desktop/Projects/hgs2-performance-lab/src"
+Ek pytest eklentisi: -p delay_finish_plugin (tools/delay_finish_plugin.py; depo dışında).
+Eklenti SyntheticServer._finish'i 200 ms geciktirir; depodaki hiçbir dosya değiştirilmedi.
+
+Amaç: synthetic_server._handle, yanıtı yazdıktan (send_plain) SONRA completed_ns'i kaydeder (_finish). Test, istemci
+yanıtı alır almaz snapshot() okur; completed_ns henüz None olabilir. Gecikme bu yarışı belirleyici hâle getirir ve
+test_synthetic_server.py:256'da TypeError ('<=' int ile NoneType) üretir.
+
+Sonuç: bu yarış GERÇEK bir başarısızlık biçimidir. 2026-10-24'teki kaydedilmemiş başarısızlığın bu olduğu KANITLANMADI.
+Normal (eklentisiz) çalıştırma: ../20261029T154043Z-flaky-candidate-normal (1 passed).

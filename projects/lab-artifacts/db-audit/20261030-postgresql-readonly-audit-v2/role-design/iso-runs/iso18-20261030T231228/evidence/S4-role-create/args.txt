@@ -1,0 +1,1 @@
+﻿-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=hgs2_perftest_db user=postgres sslmode=require" -w -v change_ref=ISO-TEST-iso18-20261030T231228 -f "C:\Users\Ceng Zeki\AppData\Local\hgs2-iso\iso18-20261030T231228\evidence\00-inputs\role_draft_approved_iso.sql"

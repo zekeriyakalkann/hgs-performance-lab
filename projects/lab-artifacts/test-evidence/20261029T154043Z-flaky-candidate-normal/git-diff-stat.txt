@@ -1,0 +1,16 @@
+ README.md                      | 1127 +++++++++++++++++++++++++++++++++++++++-
+ configs/config.example.json    |    2 +-
+ src/hgs2_lab/cli.py            |  323 ++++++++++++
+ src/hgs2_lab/config.py         |   25 +-
+ src/hgs2_lab/execution.py      |   32 +-
+ src/hgs2_lab/http_transport.py |   86 ++-
+ src/hgs2_lab/metadata.py       |   19 +
+ src/hgs2_lab/runner.py         |   17 +-
+ src/hgs2_lab/sanitize.py       |  139 ++++-
+ src/hgs2_lab/target_guard.py   |   82 ++-
+ src/hgs2_lab/transport.py      |    6 +-
+ tests/local_http_server.py     |   47 ++
+ tests/test_golden.py           |    2 +-
+ tests/test_metadata.py         |   17 +-
+ tests/test_sanitize.py         |  187 ++++++-
+ 15 files changed, 2067 insertions(+), 44 deletions(-)

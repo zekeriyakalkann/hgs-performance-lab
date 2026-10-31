@@ -1,0 +1,31 @@
+# SHA-256 manifesti — HGS2 Surefire kanıtı (23 Ekim 2026, HgsApplicationTests, default profil)
+# Doğrulama zamanı : 2026-10-30 01:09:20 +03:00 (Windows saat dilimi: Turkey Standard Time, UTC+03:00)
+# Yöntem           : sha256sum (Git Bash / GNU coreutils), kaynak ve kopya ayrı ayrı yeniden hesaplandı
+# Kapsam           : Yalnızca aşağıdaki 2 rapor. Kaynak klasördeki 29 Ekim tarihli PerfTestProfileRequiredTest raporları kapsam dışıdır.
+# Not              : Bu manifest yalnızca kanıt kopyalarını ve kaynakları okuyarak üretildi; hiçbir rapor değiştirilmedi.
+
+[1]
+Dosya adı      : TEST-com.HibritGirisSistemi.HGS.HgsApplicationTests.xml
+Kaynak yolu    : C:\Users\Ceng Zeki\Desktop\Projects\hgs2\hgs2-main\HGS-main\HGS\target\surefire-reports\TEST-com.HibritGirisSistemi.HGS.HgsApplicationTests.xml
+Kopya yolu     : C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\hgs2-evidence\surefire-20261023T180529-HgsApplicationTests-default-profile\TEST-com.HibritGirisSistemi.HGS.HgsApplicationTests.xml
+Boyut (bayt)   : kaynak 41942 / kopya 41942
+Son değişiklik : kaynak 2026-10-23 18:05:29.743739500 +03:00 / kopya 2026-10-23 18:05:29.743739500 +03:00
+Kaynak SHA-256 : 38191d48ec51c2565c640c4f90c7d88e4a0cd379e1571cb4326e8cfcc814506b
+Kopya SHA-256  : 38191d48ec51c2565c640c4f90c7d88e4a0cd379e1571cb4326e8cfcc814506b
+Eşleşme        : EŞLEŞİYOR
+Doğrulama      : 2026-10-30 01:09:20 +03:00 (Turkey Standard Time)
+
+[2]
+Dosya adı      : com.HibritGirisSistemi.HGS.HgsApplicationTests.txt
+Kaynak yolu    : C:\Users\Ceng Zeki\Desktop\Projects\hgs2\hgs2-main\HGS-main\HGS\target\surefire-reports\com.HibritGirisSistemi.HGS.HgsApplicationTests.txt
+Kopya yolu     : C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\hgs2-evidence\surefire-20261023T180529-HgsApplicationTests-default-profile\com.HibritGirisSistemi.HGS.HgsApplicationTests.txt
+Boyut (bayt)   : kaynak 346 / kopya 346
+Son değişiklik : kaynak 2026-10-23 18:05:29.718522500 +03:00 / kopya 2026-10-23 18:05:29.718522500 +03:00
+Kaynak SHA-256 : a06e459e1fe978832a5f799b979988f939e9a55b171134cc3d85377532a55bb6
+Kopya SHA-256  : a06e459e1fe978832a5f799b979988f939e9a55b171134cc3d85377532a55bb6
+Eşleşme        : EŞLEŞİYOR
+Doğrulama      : 2026-10-30 01:09:20 +03:00 (Turkey Standard Time)
+
+# Makine tarafından okunabilir satırlar (kopya dosyaları, bu klasöre göreli; biçim: <sha256><2 boşluk><dosya adı>)
+38191d48ec51c2565c640c4f90c7d88e4a0cd379e1571cb4326e8cfcc814506b  TEST-com.HibritGirisSistemi.HGS.HgsApplicationTests.xml
+a06e459e1fe978832a5f799b979988f939e9a55b171134cc3d85377532a55bb6  com.HibritGirisSistemi.HGS.HgsApplicationTests.txt

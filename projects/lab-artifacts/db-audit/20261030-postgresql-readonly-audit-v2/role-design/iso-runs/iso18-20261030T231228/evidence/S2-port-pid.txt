@@ -1,0 +1,4 @@
+::1:55438 pid=1296 test_postmaster=True
+127.0.0.1:55438 pid=1296 test_postmaster=True
+live_5432: ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+live_service_pid: 4708

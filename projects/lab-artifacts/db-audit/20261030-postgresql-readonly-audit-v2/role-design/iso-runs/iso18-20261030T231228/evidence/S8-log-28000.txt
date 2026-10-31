@@ -1,0 +1,2 @@
+﻿2026-10-30 23:13:02.882 +03 [15336] 28000 user=hgs2_audit db=hibrit_giris_db host=127.0.0.1 app=[unknown] FATAL:  pg_hba.conf rejects connection for host "127.0.0.1", user "hgs2_audit", database "hibrit_giris_db", no encryption
+2026-10-30 23:13:04.297 +03 [1572] 28000 user=hgs2_audit db=hibrit_giris_db host=127.0.0.1 app=[unknown] FATAL:  pg_hba.conf rejects connection for host "127.0.0.1", user "hgs2_audit", database "hibrit_giris_db", SSL encryption

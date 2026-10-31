@@ -1,0 +1,1 @@
+﻿-X -v ON_ERROR_STOP=1 -d "host=127.0.0.1 port=55438 dbname=postgres user=postgres sslmode=require" -w -At -c "select version(), current_setting('port'), current_setting('cluster_name'), current_setting('ssl'), current_setting('data_directory')"

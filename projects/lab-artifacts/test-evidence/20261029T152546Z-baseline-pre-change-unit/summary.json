@@ -1,0 +1,19 @@
+{
+  "label": "baseline-pre-change-unit",
+  "exit_code": 0,
+  "started_utc": "2026-10-29T15:25:46.612836+00:00",
+  "finished_utc": "2026-10-29T15:26:00.935494+00:00",
+  "duration_s": 14.3,
+  "git_head": "1fe78f482c8f430b125db853c73b1423d80f593a",
+  "tree_files": 144,
+  "tree_manifest_sha256": "67389db4095281fe2cf40724d262d59a9cf7fbdd935bf81e1dafd7737d64e183",
+  "junit": {
+    "tests": 1444,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 1444,
+    "failed_or_error_cases": []
+  },
+  "console_summary_line": null
+}

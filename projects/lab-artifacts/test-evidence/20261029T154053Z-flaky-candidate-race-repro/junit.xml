@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.305" timestamp="2026-10-29T18:40:54.774904+03:00" hostname="DESKTOP-N286CHO"><testcase classname="tests.test_synthetic_server" name="test_hold_fields_over_real_socket_and_client_time_includes_hold" time="0.186"><failure message="TypeError: '&lt;=' not supported between instances of 'int' and 'NoneType'">started = &lt;function started.&lt;locals&gt;.start at 0x00000211CC593AB0&gt;
+
+    def test_hold_fields_over_real_socket_and_client_time_includes_hold(started):
+        """Sunucu beklemesi (hold_ms_actual) ile istemcinin ölçtüğü toplam süre ayrı ölçülür; istemci beklemeyi kapsar."""
+        plan = make_plan(scenario("ok", {"type": "none"}), scenario("d", {"type": "fixed_delay", "delay_ms": 30}))
+        srv = started(plan)
+        request(srv, "/synthetic/ok")
+        _, _, client_ms = request(srv, "/synthetic/d")
+        plain, delayed = srv.snapshot()["events"]
+        assert plain["hold_ms_actual"] is None and plain["hold_started_ns"] is None
+        assert delayed["hold_ms_planned"] == 30.0 and delayed["hold_ms_actual"] &gt;= 30.0
+&gt;       assert delayed["received_ns"] &lt;= delayed["hold_started_ns"] &lt; delayed["hold_ended_ns"] &lt;= delayed["completed_ns"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: '&lt;=' not supported between instances of 'int' and 'NoneType'
+
+tests\test_synthetic_server.py:256: TypeError</failure></testcase></testsuite></testsuites>

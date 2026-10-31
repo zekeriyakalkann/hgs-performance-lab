@@ -1,0 +1,21 @@
+# Eski test koku envanteri (icerik degil, yalnizca ad/boyut). Kok: C:\Users\Ceng Zeki\AppData\Local\hgs2-iso\iso18-20261030T230745
+certs\ca.crt  1526
+certs\ca.key  2524
+certs\ca.srl  42
+certs\server.crt  1616
+certs\server.csr  1266
+certs\server.key  2524
+certs\server_ext.cnf  155
+cfg\pgpass.conf  53
+evidence\00-inputs  <DIR>
+evidence\integrity-start.sha256  638
+evidence\live-checks.txt  608
+evidence\live-start-5432.txt  44
+evidence\live-start.json  266
+evidence\stage-results.txt  300
+evidence\test-system-identifier.txt  21
+evidence\00-inputs\runner_provenance.txt  2501
+evidence\00-inputs\runner_v1_single_session.ps1  65084
+evidence\00-inputs\toolchain.txt  590
+log\postgres.log  1605
+data\  dosya=972  bayt=41636568

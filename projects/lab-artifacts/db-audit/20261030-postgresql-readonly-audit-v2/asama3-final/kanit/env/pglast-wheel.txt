@@ -1,0 +1,3 @@
+version 8.7
+https://files.pythonhosted.org/packages/98/29/9bbe86bc100d7da6bcaa0abc8babe41f016bc167c67e979908ab29544bdd/pglast-8.7-cp313-cp313-win_amd64.whl
+9615ea4aca7aa3a8cd6d53a452d4c51e28de7e4e760f2b247b59a68b6cfd0484

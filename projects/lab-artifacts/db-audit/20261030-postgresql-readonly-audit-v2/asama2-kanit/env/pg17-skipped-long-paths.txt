@@ -1,0 +1,4 @@
+pgsql/lib/pgxs/src/test/perl/PostgreSQL/Test/BackgroundPsql.pm
+pgsql/lib/pgxs/src/test/perl/PostgreSQL/Test/RecursiveCopy.pm
+pgsql/share/locale/pt_BR/LC_MESSAGES/pg_archivecleanup-17.mo
+pgsql/share/locale/zh_CN/LC_MESSAGES/pg_archivecleanup-17.mo

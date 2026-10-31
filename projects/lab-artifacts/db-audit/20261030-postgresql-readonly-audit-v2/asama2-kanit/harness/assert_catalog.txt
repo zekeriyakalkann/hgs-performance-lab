@@ -1,0 +1,28 @@
+PUBLIC CONNECT (3.4)|^ hgs2_perftest_db \| t +\| t +\| t$
+hibrit PUBLIC yok (3.4)|^ hibrit_giris_db +\| f +\| f +\| f$
+perftest hibrit CONNECT yok (3.2)|^ hibrit_giris_db +\| f +\| f +\| f$
+dogrudan uyelik grp_nested (2.3)|^ grp_nested +\| f +\| f +\|
+dolayli uyelik grp_reader (2.4)|^ grp_reader +\| f +\| t$
+dogrudan tablo yetkisi users SELECT (5.4a)|^ users +\| SELECT +\| t +\| t +\| f$
+dogrudan tablo yetkisi users INSERT (5.4a)|^ users +\| INSERT +\| t +\| t +\| f$
+uyelik yoluyla logs SELECT (5.4a)|^ logs +\| SELECT +\| t +\| t +\| f$
+sutun yetkisi tablo duzeyinde f / sutunda t (5.4a)|^ admins +\| SELECT +\| f +\| t +\| f$
+sutun ACL id (5.4c)|^ admins +\| id +\| hgs2_perftest \| pgadmin +\| SELECT$
+sutun ACL kullanici_adi (5.4c)|^ admins +\| kullanici_adi \| hgs2_perftest \| pgadmin +\| SELECT$
+default privileges (5.4d)|^ pgadmin +\| public +\| r +\| hgs2_perftest \| SELECT +\| f$
+identity seq yetkisi (5.5b)|^ public +\| users_id_seq +\| pgadmin +\| f +\| t +\| t +\| f +\| f +\| f$
+serial seq yetkisi (5.5b)|^ public +\| extra_serial_id_seq \| pgadmin +\| f +\| f +\| t +\| f +\| f +\| f$
+ALTER ROLE ALL SET maskeli (4)|^ 4 ALTER ROLE ALL .*\| hgs2.test_secret +\| <maskelendi> +\| f$
+rol search_path guvenlik (4)|^ 2 rol .*\| search_path +\| public, pg_catalog \| t$
+rol+db statement_timeout (4)|^ 1 rol\+veritabani .*\| statement_timeout \| 15s +\| f$
+db ayari maskeli (4)|^ 3 veritabani .*\| work_mem +\| <maskelendi> +\| f$
+beklenmeyen identity seq (5.9)|^ public +\| extra_ident_id_seq +\| S .*beklenmeyen tabloya bagli identity sequence$
+serial sequence (5.9)|^ public +| extra_serial_id_seq +| S .*serial / OWNED BY sequence$
+extension nesnesi (5.9)|^ public +\| pg_stat_statements +\| v .*extension nesnesi$
+beklenmeyen tablo (5.9)|^ public +\| extra_ident +\| r .*beklenmeyen nesne$
+extension (5.14)|^ pg_stat_statements +| [0-9]
+RLS politikasi (5.15)|^ public +\| users +\| t +\| f +\| users_self \| r +\| t +\| hgs2_perftest \|
+buyuk nesne metadata (5.16)|^ pgadmin +\| +1 \| +0$
+identity ozet beklenen 4 (5.17)|^ identity sequence \(beklenen 4 tabloya bagli\) +\| +4 \| +4$
+identity ozet tum 5 (5.17)|^ identity sequence \(tum kullanici .*\| +4 \| +5$
+parmak_izi_sablonu oid (5.8)|^ parmak_izi_sablonu \| oid +\| f$

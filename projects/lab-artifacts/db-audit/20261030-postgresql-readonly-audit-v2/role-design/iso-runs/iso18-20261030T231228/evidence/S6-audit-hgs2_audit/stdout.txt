@@ -1,0 +1,277 @@
+BEGIN
+SET
+SET
+SET
+SET
+SET
+ transaction_read_only 
+-----------------------
+ on
+(1 satýr)
+
+transaction_read_only= on  isolation= repeatable read  statement_timeout= 30s  lock_timeout= 5s
+Bagli veritabani: hgs2_perftest_db  rol: hgs2_audit
+ server_version_num | server_version 
+--------------------+----------------
+             180006 | 18.6
+(1 satýr)
+
+istemci host= 127.0.0.1  port= 55438  | sunucu adres= 127.0.0.1  port= 55438  cluster_name= hgs2iso18  recovery= f
+tasima= tcp-loopback  istemci_host_sinifi= loopback  tls= t  tls_surum= TLSv1.3  sifre= TLS_AES_256_GCM_SHA384  bit= 256
+BILGI: tls=t yalnizca sunucuya gelen son atlamanin sifrelendigini gosterir; sertifika ve ana bilgisayar adi dogrulamasi (sslmode=verify-full) SQL ile kanitlanamaz.
+sunucu system_identifier= 7702556342130788452  beklenen= 7702556342130788452  sunucu_rolu= primary (recovery degil)
+denetim rolu: session_user= hgs2_audit  current_user= hgs2_audit  super= f  super_role_uyeligi= f  createrole/createdb/replication/bypassrls= false/false/false/false
+HGS2_AUDIT_PREFLIGHT_OK
+ perftest_role_exists 
+----------------------
+ t
+(1 satýr)
+
+    rolname    | rolsuper | rolcreatedb | rolcreaterole | rolreplication | rolbypassrls | rolinherit | rolcanlogin | rolconnlimit | rolvaliduntil 
+---------------+----------+-------------+---------------+----------------+--------------+------------+-------------+--------------+---------------
+ hgs2_perftest | f        | f           | f             | f              | f            | t          | t           |           -1 | 
+(1 satýr)
+
+ granted_role | granted_role_is_superuser | admin_option | inherit_option | set_option | grantor 
+--------------+---------------------------+--------------+----------------+------------+---------
+(0 satýr)
+
+     role_name     | role_is_superuser | privileges_usable_without_set_role 
+-------------------+-------------------+------------------------------------
+ pg_database_owner | f                 | t
+(1 satýr)
+
+     datname      |     owner     | datallowconn | datconnlimit | datistemplate | using_default_acl 
+------------------+---------------+--------------+--------------+---------------+-------------------
+ hgs2_perftest_db | hgs2_perftest | t            |           -1 | f             | t
+ hibrit_giris_db  | postgres      | t            |           -1 | f             | f
+(2 satýr)
+
+     datname      | perftest_connect | perftest_create | perftest_temporary 
+------------------+------------------+-----------------+--------------------
+ hgs2_perftest_db | t                | t               | t
+ hibrit_giris_db  | f                | f               | t
+(2 satýr)
+
+     datname      |    grantee    |    grantor    | privilege_type | is_grantable | from_default_acl 
+------------------+---------------+---------------+----------------+--------------+------------------
+ hgs2_perftest_db | PUBLIC        | hgs2_perftest | CONNECT        | f            | t
+ hgs2_perftest_db | PUBLIC        | hgs2_perftest | TEMPORARY      | f            | t
+ hgs2_perftest_db | hgs2_perftest | hgs2_perftest | CONNECT        | f            | t
+ hgs2_perftest_db | hgs2_perftest | hgs2_perftest | CREATE         | f            | t
+ hgs2_perftest_db | hgs2_perftest | hgs2_perftest | TEMPORARY      | f            | t
+ hibrit_giris_db  | PUBLIC        | postgres      | TEMPORARY      | f            | f
+ hibrit_giris_db  | postgres      | postgres      | CONNECT        | f            | f
+ hibrit_giris_db  | postgres      | postgres      | CREATE         | f            | f
+ hibrit_giris_db  | postgres      | postgres      | TEMPORARY      | f            | f
+(9 satýr)
+
+     datname      | public_connect | public_temporary | from_default_acl 
+------------------+----------------+------------------+------------------
+ hgs2_perftest_db | t              | t                | t
+ hibrit_giris_db  | f              | t                | f
+(2 satýr)
+
+ setting_scope | database_name | role_name | setting_order | setting_name | setting_value | security_relevant | name_suggests_secret 
+---------------+---------------+-----------+---------------+--------------+---------------+-------------------+----------------------
+(0 satýr)
+
+ nspname |       owner       | using_default_acl |                         effective_acl                         | perftest_usage | perftest_create 
+---------+-------------------+-------------------+---------------------------------------------------------------+----------------+-----------------
+ public  | pg_database_owner | f                 | {pg_database_owner=UC/pg_database_owner,=U/pg_database_owner} | t              | t
+(1 satýr)
+
+ nspname |    relname     | relkind |     owner     | row_security_enabled 
+---------+----------------+---------+---------------+----------------------
+ public  | admins_id_seq  | S       | hgs2_perftest | f
+ public  | devices_id_seq | S       | hgs2_perftest | f
+ public  | logs_id_seq    | S       | hgs2_perftest | f
+ public  | users_id_seq   | S       | hgs2_perftest | f
+ public  | admins         | r       | hgs2_perftest | f
+ public  | devices        | r       | hgs2_perftest | f
+ public  | logs           | r       | hgs2_perftest | f
+ public  | users          | r       | hgs2_perftest | f
+(8 satýr)
+
+ relname | present | relkind |     owner     
+---------+---------+---------+---------------
+ admins  | t       | r       | hgs2_perftest
+ devices | t       | r       | hgs2_perftest
+ logs    | t       | r       | hgs2_perftest
+ users   | t       | r       | hgs2_perftest
+(4 satýr)
+
+ relname |     owner     |    grantee    |    grantor    | privilege_type | is_grantable | from_default_acl 
+---------+---------------+---------------+---------------+----------------+--------------+------------------
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | DELETE         | f            | t
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | INSERT         | f            | t
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | MAINTAIN       | f            | t
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | REFERENCES     | f            | t
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | SELECT         | f            | t
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRIGGER        | f            | t
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRUNCATE       | f            | t
+ admins  | hgs2_perftest | hgs2_perftest | hgs2_perftest | UPDATE         | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | DELETE         | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | INSERT         | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | MAINTAIN       | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | REFERENCES     | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | SELECT         | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRIGGER        | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRUNCATE       | f            | t
+ devices | hgs2_perftest | hgs2_perftest | hgs2_perftest | UPDATE         | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | DELETE         | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | INSERT         | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | MAINTAIN       | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | REFERENCES     | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | SELECT         | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRIGGER        | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRUNCATE       | f            | t
+ logs    | hgs2_perftest | hgs2_perftest | hgs2_perftest | UPDATE         | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | DELETE         | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | INSERT         | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | MAINTAIN       | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | REFERENCES     | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | SELECT         | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRIGGER        | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | TRUNCATE       | f            | t
+ users   | hgs2_perftest | hgs2_perftest | hgs2_perftest | UPDATE         | f            | t
+(32 satýr)
+
+ relname | privilege_type | perftest_has_privilege | perftest_any_column | perftest_is_owner | direct_acl | public_acl | privilege_source 
+---------+----------------+------------------------+---------------------+-------------------+------------+------------+------------------
+ admins  | DELETE         | t                      |                     | t                 | t          | f          | sahiplik
+ admins  | INSERT         | t                      | t                   | t                 | t          | f          | sahiplik
+ admins  | REFERENCES     | t                      | t                   | t                 | t          | f          | sahiplik
+ admins  | SELECT         | t                      | t                   | t                 | t          | f          | sahiplik
+ admins  | TRIGGER        | t                      |                     | t                 | t          | f          | sahiplik
+ admins  | TRUNCATE       | t                      |                     | t                 | t          | f          | sahiplik
+ admins  | UPDATE         | t                      | t                   | t                 | t          | f          | sahiplik
+ devices | DELETE         | t                      |                     | t                 | t          | f          | sahiplik
+ devices | INSERT         | t                      | t                   | t                 | t          | f          | sahiplik
+ devices | REFERENCES     | t                      | t                   | t                 | t          | f          | sahiplik
+ devices | SELECT         | t                      | t                   | t                 | t          | f          | sahiplik
+ devices | TRIGGER        | t                      |                     | t                 | t          | f          | sahiplik
+ devices | TRUNCATE       | t                      |                     | t                 | t          | f          | sahiplik
+ devices | UPDATE         | t                      | t                   | t                 | t          | f          | sahiplik
+ logs    | DELETE         | t                      |                     | t                 | t          | f          | sahiplik
+ logs    | INSERT         | t                      | t                   | t                 | t          | f          | sahiplik
+ logs    | REFERENCES     | t                      | t                   | t                 | t          | f          | sahiplik
+ logs    | SELECT         | t                      | t                   | t                 | t          | f          | sahiplik
+ logs    | TRIGGER        | t                      |                     | t                 | t          | f          | sahiplik
+ logs    | TRUNCATE       | t                      |                     | t                 | t          | f          | sahiplik
+ logs    | UPDATE         | t                      | t                   | t                 | t          | f          | sahiplik
+ users   | DELETE         | t                      |                     | t                 | t          | f          | sahiplik
+ users   | INSERT         | t                      | t                   | t                 | t          | f          | sahiplik
+ users   | REFERENCES     | t                      | t                   | t                 | t          | f          | sahiplik
+ users   | SELECT         | t                      | t                   | t                 | t          | f          | sahiplik
+ users   | TRIGGER        | t                      |                     | t                 | t          | f          | sahiplik
+ users   | TRUNCATE       | t                      |                     | t                 | t          | f          | sahiplik
+ users   | UPDATE         | t                      | t                   | t                 | t          | f          | sahiplik
+(28 satýr)
+
+ relname | privilege_type | perftest_has_privilege | perftest_is_owner 
+---------+----------------+------------------------+-------------------
+ admins  | MAINTAIN       | t                      | t
+ devices | MAINTAIN       | t                      | t
+ logs    | MAINTAIN       | t                      | t
+ users   | MAINTAIN       | t                      | t
+(4 satýr)
+
+ relname | attname | grantee_name | grantor_name | privilege_type 
+---------+---------+--------------+--------------+----------------
+(0 satýr)
+
+ for_role | schema_name | defaclobjtype | grantee_name | privilege_type | is_grantable 
+----------+-------------+---------------+--------------+----------------+--------------
+(0 satýr)
+
+ sequence_schema | sequence_name  | sequence_owner | table_schema | table_name | column_name | attidentity | on_expected_table 
+-----------------+----------------+----------------+--------------+------------+-------------+-------------+-------------------
+ public          | admins_id_seq  | hgs2_perftest  | public       | admins     | id          | d           | t
+ public          | devices_id_seq | hgs2_perftest  | public       | devices    | id          | d           | t
+ public          | logs_id_seq    | hgs2_perftest  | public       | logs       | id          | d           | t
+ public          | users_id_seq   | hgs2_perftest  | public       | users      | id          | d           | t
+(4 satýr)
+
+ sequence_schema | sequence_name  | sequence_owner | using_default_acl | expected_identity | perftest_usage | perftest_select | perftest_update | perftest_is_owner 
+-----------------+----------------+----------------+-------------------+-------------------+----------------+-----------------+-----------------+-------------------
+ public          | admins_id_seq  | hgs2_perftest  | t                 | t                 | t              | t               | t               | t
+ public          | devices_id_seq | hgs2_perftest  | t                 | t                 | t              | t               | t               | t
+ public          | logs_id_seq    | hgs2_perftest  | t                 | t                 | t              | t               | t               | t
+ public          | users_id_seq   | hgs2_perftest  | t                 | t                 | t              | t               | t               | t
+(4 satýr)
+
+ contype | constraint_count 
+---------+------------------
+ f       |                2
+ p       |                4
+ u       |                3
+(3 satýr)
+
+ table_name |         conname          | contype |                      definition                       | referenced_table 
+------------+--------------------------+---------+-------------------------------------------------------+------------------
+ logs       | logs_device_id_fkey      | f       | FOREIGN KEY (device_id) REFERENCES public.devices(id) | public.devices
+ logs       | logs_user_id_fkey        | f       | FOREIGN KEY (user_id) REFERENCES public.users(id)     | public.users
+ admins     | admins_pkey              | p       | PRIMARY KEY (id)                                      | -
+ devices    | devices_pkey             | p       | PRIMARY KEY (id)                                      | -
+ logs       | logs_pkey                | p       | PRIMARY KEY (id)                                      | -
+ users      | users_pkey               | p       | PRIMARY KEY (id)                                      | -
+ admins     | admins_kullanici_adi_key | u       | UNIQUE (kullanici_adi)                                | -
+ users      | users_kart_no_key        | u       | UNIQUE (kart_no)                                      | -
+ users      | users_ogrenci_no_key     | u       | UNIQUE (ogrenci_no)                                   | -
+(9 satýr)
+
+      attname       | data_type | attnotnull 
+--------------------+-----------+------------
+ parmak_izi_sablonu | oid       | f
+(1 satýr)
+
+ nspname | relname | relkind | owner | reason 
+---------+---------+---------+-------+--------
+(0 satýr)
+
+ nspname | typname | typtype | owner 
+---------+---------+---------+-------
+(0 satýr)
+
+ nspname | proname | arguments | prokind | prosecdef | proconfig_masked | secdef_search_path_unpinned | owner | from_extension | perftest_execute 
+---------+---------+-----------+---------+-----------+------------------+-----------------------------+-------+----------------+------------------
+(0 satýr)
+
+ table_schema | table_name | tgname | tgenabled | trigger_function 
+--------------+------------+--------+-----------+------------------
+(0 satýr)
+
+ evtname | evtevent | evtenabled | owner 
+---------+----------+------------+-------
+(0 satýr)
+
+ extname | extversion |  owner   | extension_schema 
+---------+------------+----------+------------------
+ plpgsql | 1.0        | postgres | pg_catalog
+(1 satýr)
+
+ srvname | fdwname | owner | option_names | options_reference_hibrit_giris_db | user_mapping_count 
+---------+---------+-------+--------------+-----------------------------------+--------------------
+(0 satýr)
+
+ table_schema | table_name | rls_enabled | rls_forced | polname | polcmd | polpermissive | policy_roles | using_expr | with_check_expr 
+--------------+------------+-------------+------------+---------+--------+---------------+--------------+------------+-----------------
+(0 satýr)
+
+ owner | large_object_count | with_explicit_acl 
+-------+--------------------+-------------------
+(0 satýr)
+
+                          check_item                          | reference_value | observed_value 
+--------------------------------------------------------------+-----------------+----------------
+ tablo (public: admins/devices/logs/users)                    |               4 |              4
+ identity sequence (beklenen 4 tabloya bagli)                 |               4 |              4
+ identity sequence (tum kullanici semalari; 5.5 satir sayisi) |               4 |              4
+ primary key                                                  |               4 |              4
+ unique                                                       |               3 |              3
+ foreign key                                                  |               2 |              2
+(6 satýr)
+
+ROLLBACK
+HGS2_AUDIT_COMPLETE

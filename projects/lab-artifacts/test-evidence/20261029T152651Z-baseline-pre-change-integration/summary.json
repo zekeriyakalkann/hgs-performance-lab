@@ -1,0 +1,19 @@
+{
+  "label": "baseline-pre-change-integration",
+  "exit_code": 0,
+  "started_utc": "2026-10-29T15:26:51.578489+00:00",
+  "finished_utc": "2026-10-29T15:27:37.745791+00:00",
+  "duration_s": 46.2,
+  "git_head": "1fe78f482c8f430b125db853c73b1423d80f593a",
+  "tree_files": 144,
+  "tree_manifest_sha256": "67389db4095281fe2cf40724d262d59a9cf7fbdd935bf81e1dafd7737d64e183",
+  "junit": {
+    "tests": 97,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 97,
+    "failed_or_error_cases": []
+  },
+  "console_summary_line": "97 passed, 1444 deselected in 44.35s"
+}

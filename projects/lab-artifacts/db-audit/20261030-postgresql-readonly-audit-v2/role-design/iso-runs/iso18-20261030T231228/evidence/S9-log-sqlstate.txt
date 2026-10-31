@@ -1,0 +1,1 @@
+﻿2026-10-30 23:13:07.519 +03 [2568] 42501 user=hgs2_perftest db=hibrit_giris_db host=127.0.0.1 app=[unknown] FATAL:  permission denied for database "hibrit_giris_db"

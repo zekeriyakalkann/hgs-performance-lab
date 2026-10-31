@@ -1,0 +1,121 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261030230744
+Username: DESKTOP-N286CHO\Ceng Zeki
+RunAs User: DESKTOP-N286CHO\Ceng Zeki
+Configuration Name: 
+Machine: DESKTOP-N286CHO (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\Users\CENGZE~1\AppData\Local\Temp\claude\C--Users-Ceng-Zeki-Desktop-Projects-hgs2-lab-artifacts-db-audit-20261030-postgresql-readonly-audit-v2\8dd06e11-4ff9-4d5c-b292-d27d9506fa4c\scratchpad\runner_v1_single_session.ps1 -ConfirmFile C:\Users\CENGZE~1\AppData\Local\Temp\claude\C--Users-Ceng-Zeki-Desktop-Projects-hgs2-lab-artifacts-db-audit-20261030-postgresql-readonly-audit-v2\8dd06e11-4ff9-4d5c-b292-d27d9506fa4c\scratchpad\confirm-delete.txt -TranscriptFile C:\Users\CENGZE~1\AppData\Local\Temp\claude\C--Users-Ceng-Zeki-Desktop-Projects-hgs2-lab-artifacts-db-audit-20261030-postgresql-readonly-audit-v2\8dd06e11-4ff9-4d5c-b292-d27d9506fa4c\scratchpad\runner-transcript.txt -ConsoleLog C:\Users\CENGZE~1\AppData\Local\Temp\claude\C--Users-Ceng-Zeki-Desktop-Projects-hgs2-lab-artifacts-db-audit-20261030-postgresql-readonly-audit-v2\8dd06e11-4ff9-4d5c-b292-d27d9506fa4c\scratchpad\runner-console.log
+Process ID: 21496
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+===== S0 =====
+5.1.26100.9711
+ConsoleHost
+
+Value                                                            Name
+-----                                                            ----
+5916d12bb1194b6978cbe480b60a2d2311dee6afe3e3da3dabf93bb7a96aa40b C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifa...
+398889d315187e965bb555f2fa72ba92f7bfcb341d5cca50dfdaa96a822cf389 C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifa...
+5733d45fa265309089a417c2e2653d2564f63783df854b78316447c11694bd7b C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifa...
+
+
+
+
+
+
+
+
+True
+False
+PSVersion: 5.1.26100.9711
+Host: ConsoleHost
+Kullanici: DESKTOP-N286CHO\Ceng Zeki
+postgres.exe: postgres (PostgreSQL) 18.6
+psql.exe: psql (PostgreSQL) 18.6
+initdb.exe: initdb (PostgreSQL) 18.6
+pg_ctl.exe: pg_ctl (PostgreSQL) 18.6
+pg_controldata.exe: pg_controldata (PostgreSQL) 18.6
+py -3.13: Python 3.13.16
+openssl: OpenSSL 3.5.8 25 Aug 2026 (Library: OpenSSL 3.5.8 25 Aug 2026)
+excludedportrange ipv4/ipv6: 55438 kapsanmiyor
+runbook sha256: de943cc52a9d79aa7138a22946d2eed0cd15820d987551ea2caa81e6a5ccc081
+validator sha256: a99fcb8fefff9d4cdd560639a9ef50e8ae65ee5c429578f636912f8557c50a57
+S0 kapilari: PASS
+===== S1 =====
+
+
+State    : Running
+Pid      : 4708
+Created  : 2026-10-30T16:29:54.8155590+03:00
+PathName : "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" runservice -N "postgresql-x64-18" -D "C:\Program Files\Postg
+           reSQL\18\data" -w
+
+
+
+5432 dinleyicileri: ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+RunId: iso18-20261030T230745
+Test koku: C:\Users\Ceng Zeki\AppData\Local\hgs2-iso\iso18-20261030T230745
+2026-10-30T23:07:46.8369637+03:00 after-S1 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.1 =====
+
+Name
+----
+certs
+cfg
+evidence
+log
+
+
+2026-10-30T23:07:47.4775417+03:00 after-S2.1 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.2 =====
+
+SysId: 7702555126523793588
+2026-10-30T23:07:54.9305878+03:00 after-S2.2 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.3 =====
+
+
+
+
+Name           Length
+----           ------
+ca.crt           1526
+ca.key           2524
+ca.srl             42
+server.crt       1616
+server.csr       1266
+server.key       2524
+server_ext.cnf    155
+
+
+2026-10-30T23:07:55.9209771+03:00 after-S2.3 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.4 =====
+2026-10-30T23:07:56.3061699+03:00 after-S2.4 live_service=unchanged(State=Running Pid=4708) 5432=unchanged(::1:5432 pid=6164; 127.0.0.1:5432 pid=6164)
+===== S2.5 =====
+
+PS>TerminatingError(): "GUARD: test postmaster bulunamadi"
+HATA/DUR: GUARD: test postmaster bulunamadi
+
+test kumesi durdurma cikis: 0
+
+
+State    : Running
+Pid      : 4708
+Created  : 2026-10-30T16:29:54.8155590+03:00
+PathName : "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" runservice -N "postgresql-x64-18" -D "C:\Program Files\Postg
+           reSQL\18\data" -w
+
+
+
+5432: ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164
+**********************
+Windows PowerShell transcript end
+End time: 20261030230757
+**********************

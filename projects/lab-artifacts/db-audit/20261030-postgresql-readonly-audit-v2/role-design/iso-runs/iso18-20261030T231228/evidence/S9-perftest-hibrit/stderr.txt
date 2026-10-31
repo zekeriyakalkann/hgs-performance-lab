@@ -1,0 +1,2 @@
+psql: hata (error): connection to server at "127.0.0.1", port 55438 failed: FATAL:  permission denied for database "hibrit_giris_db"
+AYRINTI:  User does not have CONNECT privilege.

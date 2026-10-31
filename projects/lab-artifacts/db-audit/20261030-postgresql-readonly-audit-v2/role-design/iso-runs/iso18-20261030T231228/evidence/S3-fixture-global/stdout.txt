@@ -1,0 +1,15 @@
+CREATE ROLE
+CREATE DATABASE
+CREATE DATABASE
+CREATE DATABASE
+REVOKE
+     datname      |     owner     |               datacl                
+------------------+---------------+-------------------------------------
+ hgs2_perftest_db | hgs2_perftest | 
+ hibrit_giris_db  | postgres      | {=T/postgres,postgres=CTc/postgres}
+ other_db         | postgres      | 
+ postgres         | postgres      | 
+ template0        | postgres      | {=c/postgres,postgres=CTc/postgres}
+ template1        | postgres      | {=c/postgres,postgres=CTc/postgres}
+(6 satýr)
+

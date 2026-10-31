@@ -1,0 +1,2 @@
+"C:\Users\Ceng Zeki\Desktop\Projects\hgs2-performance-lab\.venv\Scripts\python.exe" -m pytest -p no:cacheprovider -rfEs --tb=long "--junitxml=C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\test-evidence\20261029T154409Z-step3-target-security\junit.xml" -q tests/test_target_guard.py tests/test_isolation_guard.py tests/test_target_identity.py tests/test_http_transport.py tests/test_config.py tests/test_sanitize.py
+(cwd: C:\Users\Ceng Zeki\Desktop\Projects\hgs2-performance-lab)

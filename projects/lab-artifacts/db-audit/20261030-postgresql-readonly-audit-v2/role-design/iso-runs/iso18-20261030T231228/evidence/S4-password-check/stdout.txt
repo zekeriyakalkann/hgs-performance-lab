@@ -1,0 +1,2 @@
+hgs2_audit|SCRAM-SHA-256$
+hgs2_perftest|SCRAM-SHA-256$

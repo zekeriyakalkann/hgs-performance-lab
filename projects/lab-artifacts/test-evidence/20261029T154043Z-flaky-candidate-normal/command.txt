@@ -1,0 +1,2 @@
+"C:\Users\Ceng Zeki\Desktop\Projects\hgs2-performance-lab\.venv\Scripts\python.exe" -m pytest -p no:cacheprovider -rfEs --tb=long "--junitxml=C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\test-evidence\20261029T154043Z-flaky-candidate-normal\junit.xml" -m integration tests/test_synthetic_server.py::test_hold_fields_over_real_socket_and_client_time_includes_hold
+(cwd: C:\Users\Ceng Zeki\Desktop\Projects\hgs2-performance-lab)

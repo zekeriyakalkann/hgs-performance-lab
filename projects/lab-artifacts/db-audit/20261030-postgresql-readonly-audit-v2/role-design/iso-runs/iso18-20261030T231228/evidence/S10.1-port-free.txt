@@ -1,0 +1,3 @@
+port_55438_listen_count: 0
+test_postmaster_count: 0
+live_5432: ::1:5432 pid=6164; 127.0.0.1:5432 pid=6164

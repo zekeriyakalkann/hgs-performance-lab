@@ -1,0 +1,2 @@
+"C:\Users\Ceng Zeki\Desktop\Projects\hgs2-performance-lab\.venv\Scripts\python.exe" -m pytest -p no:cacheprovider -rfEs --tb=long "--junitxml=C:\Users\Ceng Zeki\Desktop\Projects\hgs2-lab-artifacts\test-evidence\20261029T154405Z-step2-classification\junit.xml" -q tests/test_classify.py tests/test_business_outcome.py tests/test_expectations_pipeline.py tests/test_result_analysis.py tests/test_expectations.py tests/test_records.py
+(cwd: C:\Users\Ceng Zeki\Desktop\Projects\hgs2-performance-lab)
