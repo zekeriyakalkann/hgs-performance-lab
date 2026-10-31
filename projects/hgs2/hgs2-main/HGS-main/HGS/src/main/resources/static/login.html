@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HGS - Yönetici Girişi</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="login-body">
+    
+    <div class="login-box">
+        <div class="login-header">
+            <h2>HGS Yönetim</h2>
+            <p>Panele erişmek için oturum açın</p>
+        </div>
+
+        <form id="loginForm" onsubmit="adminGiris(event)">
+            <div class="form-grup">
+                <label for="username">Kullanıcı Adı</label>
+                <input type="text" id="username" required autocomplete="off">
+            </div>
+            
+            <div class="form-grup">
+                <label for="password">Şifre</label>
+                <input type="password" id="password" required>
+            </div>
+            
+            <button type="submit" class="login-btn">Giriş Yap</button>
+            <p id="hataMesaji" class="login-error"></p>
+        </form>
+    </div>
+
+    <script src="/js/script.js"></script>
+</body>
+</html>
