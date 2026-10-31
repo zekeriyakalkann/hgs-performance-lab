@@ -2,6 +2,11 @@
 
 HGS2 Spring Boot API'si için akademik performans testi ve analiz aracı (bağımsız Python projesi).
 
+> **Birleşik depo notu (2026-10-31):** Bu proje artık birleşik deponun `projects/performance-lab/` dizinindedir.
+> Aşağıdaki "proje kökü" ifadeleri bu dizini kasteder; tüm komutlar buradan çalıştırılır. HGS2 uygulaması
+> `projects/hgs2/`, onaylı kanıtlar `projects/lab-artifacts/` altındadır (bkz. depo kökündeki `README.md`). Kapanış
+> kayıtlarındaki `hgs2-lab-artifacts\…` yolları özgün yerel dizine aittir.
+
 **Durum:** Yapılandırmadan sonuç dosyalarına kadar çalıştırma akışı ve `run` komutu etkindir, ama **yalnızca loopback
 hedeflere** (`127.0.0.1`, `::1`, `localhost`) istek gönderir. Kaydedilmiş sonuçlar `analyze` komutuyla çevrimdışı
 analiz edilir (betimleyici istatistikler; ağ erişimi yok). `synthetic` komutları, uygulamanın kendi yerel test
