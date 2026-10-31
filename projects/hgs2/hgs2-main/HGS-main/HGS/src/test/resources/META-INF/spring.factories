@@ -1,0 +1,3 @@
+# Yalnizca test classpath'i: her Spring TestContext baglaminda perftest profilini zorunlu kilar.
+# Sinif adi yanlis yazilirsa Spring Test bu kaydi yalnizca debug gunlugu ile atlar; adi degistirirken bu satiri da guncelleyin.
+org.springframework.test.context.ContextCustomizerFactory=com.HibritGirisSistemi.HGS.PerfTestProfileRequired
